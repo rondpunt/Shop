@@ -1,0 +1,49 @@
+name: Final production polish
+
+on:
+  push:
+    branches: [import-parkv3-clean]
+    paths:
+      - scripts/final_polish.py
+      - .github/workflows/final-polish.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: import-parkv3-clean
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply final patches
+        run: python3 scripts/final_polish.py
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Build PWA
+        run: npm run build:pwa
+      - name: Commit verified changes and clean temporary tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f scripts/final_polish.py .github/workflows/final-polish.yml
+          git config user.name "Shop Production Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -- \
+            src/pages/Premium.tsx \
+            src/hooks/usePremium.ts \
+            src/pages/Settings.tsx \
+            src/integrations/supabase/types.ts \
+            scripts/final_polish.py \
+            .github/workflows/final-polish.yml
+          git diff --cached --check
+          git commit -m "feat: harden Premium trial and PWA install flow"
+          git push origin HEAD:import-parkv3-clean
