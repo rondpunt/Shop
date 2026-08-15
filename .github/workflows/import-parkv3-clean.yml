@@ -27,34 +27,29 @@ jobs:
           set -euo pipefail
           SRC=/tmp/parkv3
 
-          # Remove the placeholder README. Keep .git and this one-time workflow.
           rm -f README.md
 
-          # Root project files that are part of the actual app/build configuration.
           for f in \
             .env.example .eslintignore README.md capacitor.config.ts components.json \
             eslint.config.js index.html metadata.json package.json package-lock.json \
-            postcss.config.js tailwind.config.ts tsconfig.app.json tsconfig.json \
+            postcss.config.js server.ts tailwind.config.ts tsconfig.app.json tsconfig.json \
             tsconfig.node.json vite.config.ts vitest.config.ts; do
             [ -e "$SRC/$f" ] && cp -a "$SRC/$f" "$f"
           done
 
-          # Actual application source, public source assets and backend schema/functions.
           rm -rf src public supabase android
           cp -a "$SRC/src" ./src
           cp -a "$SRC/public" ./public
           cp -a "$SRC/supabase" ./supabase
 
-          # Keep the native Android project, but remove compiled/generated web output.
           cp -a "$SRC/android" ./android
           rm -rf android/app/src/main/assets/public
           rm -f android/app/src/main/assets/capacitor.config.json
           rm -f android/app/src/main/assets/capacitor.plugins.json
           rm -f android/app/src/main/assets/cordova.js android/app/src/main/assets/cordova_plugins.js
 
-          # Do not import temporary repair/migration scripts or duplicate generated bundles:
-          # fix*.{js,cjs}, patch*.{js,cjs}, rewrite_*, restart.cjs, test-checkout.*,
-          # server_stripe.cjs, update_active_session_note.sh, bun.lock.
+          # Intentionally excluded: temporary fix/patch/rewrite scripts, duplicate build output,
+          # test-checkout files, legacy server_stripe.cjs, update helper and bun.lock.
 
       - name: Commit cleaned import
         shell: bash
@@ -65,7 +60,7 @@ jobs:
           git add -- \
             .env.example .eslintignore README.md capacitor.config.ts components.json \
             eslint.config.js index.html metadata.json package.json package-lock.json \
-            postcss.config.js tailwind.config.ts tsconfig.app.json tsconfig.json \
+            postcss.config.js server.ts tailwind.config.ts tsconfig.app.json tsconfig.json \
             tsconfig.node.json vite.config.ts vitest.config.ts src public supabase android
           if git diff --cached --quiet; then
             echo "Nothing to import"
