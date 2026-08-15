@@ -21,7 +21,7 @@ jobs:
       - name: Install
         run: npm ci --no-audit --no-fund
       - name: Production dependency audit
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --omit=dev --audit-level=moderate
       - name: Lint
         run: npm run lint
       - name: Test
