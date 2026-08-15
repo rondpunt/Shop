@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type ParkoBay = {
   id: string;
@@ -28,8 +28,8 @@ export type ParkoPayload = {
 const REFRESH_MS = 30_000;
 
 /**
- * Live Parko Shop&Go availability via our edge proxy.
- * Auto-refreshes every 30s while mounted.
+ * Live Parko Shop&Go availability via our Vercel proxy.
+ * Keeps the last successful payload visible while refreshing every 30 seconds.
  */
 export const useParkoLive = () => {
   const [data, setData] = useState<ParkoPayload | null>(() => {
@@ -41,24 +41,36 @@ export const useParkoLive = () => {
     }
   });
   const [loading, setLoading] = useState(!data);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const dataRef = useRef<ParkoPayload | null>(data);
-  useEffect(() => { dataRef.current = data; }, [data]);
+  const mountedRef = useRef(true);
+  const loadRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
-    let active = true;
+    dataRef.current = data;
+  }, [data]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
     const load = async () => {
+      const hasData = !!dataRef.current;
+      if (hasData) setRefreshing(true);
+      else setLoading(true);
+
       try {
-        const response = await fetch("/api/parko-states");
-        if (!active) return;
+        const response = await fetch("/api/parko-states", { cache: "no-store" });
+        if (!mountedRef.current) return;
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
           throw new Error(errData.error || `Server error: ${response.status}`);
         }
-        
-        const payload = await response.json();
-        setData(payload as ParkoPayload);
+
+        const payload = (await response.json()) as ParkoPayload;
+        dataRef.current = payload;
+        setData(payload);
         try {
           localStorage.setItem("shopgo_parko_cache", JSON.stringify(payload));
         } catch (e) {
@@ -66,24 +78,29 @@ export const useParkoLive = () => {
         }
         setError(null);
       } catch (e) {
-        if (!active) return;
-        // Only set error if we don't have cached data to show
-        if (!dataRef.current) {
-          setError(e instanceof Error ? e.message : "Kon live data niet laden");
-        }
+        if (!mountedRef.current) return;
+        setError(e instanceof Error ? e.message : "Kon live data niet laden");
       } finally {
-        if (active) setLoading(false);
+        if (mountedRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     };
-    load();
-    const t = setInterval(load, REFRESH_MS);
+
+    loadRef.current = load;
+    void load();
+    const t = window.setInterval(() => void load(), REFRESH_MS);
+
     return () => {
-      active = false;
-      clearInterval(t);
+      mountedRef.current = false;
+      window.clearInterval(t);
     };
   }, []);
 
-  return { data, loading, error };
+  const refresh = () => loadRef.current();
+
+  return { data, loading, refreshing, error, refresh };
 };
 
 /** Find the nearest Parko zone within `maxKm` of the given coordinates. */
