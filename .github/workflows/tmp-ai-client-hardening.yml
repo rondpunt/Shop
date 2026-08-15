@@ -1,0 +1,40 @@
+name: One-time AI client hardening
+
+on:
+  push:
+    branches: [import-parkv3-clean]
+    paths: [.github/workflows/tmp-ai-client-hardening.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: import-parkv3-clean
+      - name: Patch AI client authentication
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/pages/AiAssistant.tsx')
+          s = p.read_text()
+          needle = 'import { PageHeader } from "@/components/PageHeader";\n'
+          if 'integrations/supabase/client' not in s:
+              s = s.replace(needle, needle + 'import { supabase } from "@/integrations/supabase/client";\n')
+          marker = 'const CHAT_PRESETS = ['
+          helper = '''const getAiHeaders = async () => {\n  const { data: { session } } = await supabase.auth.getSession();\n  if (!session?.access_token) {\n    throw new Error("Meld je eerst aan om de AI-parkeerassistent te gebruiken.");\n  }\n  return {\n    "Content-Type": "application/json",\n    Authorization: `Bearer ${session.access_token}`,\n  };\n};\n\n'''
+          if 'const getAiHeaders' not in s:
+              s = s.replace(marker, helper + marker)
+          s = s.replace('headers: { "Content-Type": "application/json" },', 'headers: await getAiHeaders(),')
+          s = s.replace('text: `Sorry, ik kon je vraag momenteel niet beantwoorden: ${error.message}. Is je Gemini API-sleutel ingesteld in de Secrets panel?`', 'text: `Sorry, ik kon je vraag momenteel niet beantwoorden: ${error.message}`')
+          p.write_text(s)
+          PY
+          git config user.name "shopgo-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/pages/AiAssistant.tsx
+          git diff --cached --exit-code && exit 0
+          git commit -m "security: authenticate AI assistant client requests"
+          git push origin HEAD:import-parkv3-clean
