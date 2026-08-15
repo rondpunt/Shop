@@ -18,8 +18,6 @@ const Onboarding = lazy(() => import("./pages/Onboarding"));
 const ReminderSettings = lazy(() => import("./pages/ReminderSettings"));
 const LocationDetail = lazy(() => import("./pages/LocationDetail"));
 const Timer = lazy(() => import("./pages/Timer"));
-const LogViewer = lazy(() => import("./pages/LogViewer"));
-const MarketingDashboard = lazy(() => import("./pages/MarketingDashboard"));
 const AiAssistant = lazy(() => import("./pages/AiAssistant"));
 const About = lazy(() => import("./pages/About"));
 const Privacy = lazy(() => import("./pages/Privacy"));
@@ -31,27 +29,6 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/AppLayout";
 import ScrollToTop from "@/components/ScrollToTop";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,36 +50,34 @@ const App = () => (
           <AuthProvider>
             <ScrollToTop />
             <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route element={<AppLayout />}>
-                <Route path="/" element={<Home />} />
-                <Route path="/ai" element={<AiAssistant />} />
-                <Route path="/zones" element={<Zones />} />
-                <Route path="/locatie/:id" element={<LocationDetail />} />
-                <Route path="/timer" element={<Timer />} />
-                <Route path="/favorieten" element={<Favorites />} />
-                <Route path="/historiek" element={<History />} />
-                <Route path="/auto" element={<Cars />} />
-                <Route path="/instellingen" element={<Settings />} />
-                <Route path="/instellingen/waarschuwing" element={<ReminderSettings />} />
-                <Route path="/instellingen/logs" element={<LogViewer />} />
-                <Route path="/instellingen/marketing" element={<MarketingDashboard />} />
-                <Route path="/profiel" element={<Profile />} />
-                <Route path="/premium" element={<Premium />} />
-                <Route path="/over" element={<About />} />
-                <Route path="/privacy" element={<Privacy />} />
+              <Routes>
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/onboarding" element={<Onboarding />} />
+                <Route element={<AppLayout />}>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/ai" element={<AiAssistant />} />
+                  <Route path="/zones" element={<Zones />} />
+                  <Route path="/locatie/:id" element={<LocationDetail />} />
+                  <Route path="/timer" element={<Timer />} />
+                  <Route path="/favorieten" element={<Favorites />} />
+                  <Route path="/historiek" element={<History />} />
+                  <Route path="/auto" element={<Cars />} />
+                  <Route path="/instellingen" element={<Settings />} />
+                  <Route path="/instellingen/waarschuwing" element={<ReminderSettings />} />
+                  <Route path="/profiel" element={<Profile />} />
+                  <Route path="/premium" element={<Premium />} />
+                  <Route path="/over" element={<About />} />
+                  <Route path="/privacy" element={<Privacy />} />
 
-                {/* legacy aliases — keep old links alive */}
-                <Route path="/session/:id" element={<ActiveSession />} />
-                <Route path="/cars" element={<Cars />} />
-                <Route path="/history" element={<History />} />
-                <Route path="/sync" element={<Sync />} />
-                <Route path="/settings" element={<Settings />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+                  {/* Legacy aliases keep previously shared links alive. */}
+                  <Route path="/session/:id" element={<ActiveSession />} />
+                  <Route path="/cars" element={<Cars />} />
+                  <Route path="/history" element={<History />} />
+                  <Route path="/sync" element={<Sync />} />
+                  <Route path="/settings" element={<Settings />} />
+                </Route>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
             </Suspense>
           </AuthProvider>
         </BrowserRouter>
