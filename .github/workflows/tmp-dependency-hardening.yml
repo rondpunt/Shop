@@ -19,12 +19,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Update vulnerable production dependency graph
+      - name: Update vulnerable dependency graph without forcing majors
         run: |
           npm ci --no-audit --no-fund
-          npm install --save-dev @capacitor/cli@^8.3.1 @capacitor/android@^8.3.1 @capacitor/ios@^8.3.1
+          npm install --save-exact @capacitor/core@8.4.2
+          npm install --save-dev --save-exact @capacitor/cli@8.4.2 @capacitor/android@8.4.2 @capacitor/ios@8.4.2
           npm install --save-exact react-router-dom@6.30.4
-          npm audit fix
+          npm audit fix || true
           npm audit --omit=dev --audit-level=high
       - name: Commit lockfile-safe security updates
         run: |
