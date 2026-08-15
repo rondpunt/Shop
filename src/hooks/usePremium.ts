@@ -3,9 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getStripeEnvironment, hasStripeToken } from "@/lib/stripe";
 
-const TRIAL_KEY = "shopgo:premium:trial_end";
-const TRIAL_DAYS = 7;
-
 type Plan = "monthly" | "yearly";
 
 type SubRow = {
@@ -16,36 +13,13 @@ type SubRow = {
 };
 
 type PremiumState = {
-  /** True when user has paid sub OR active local trial. */
   premium: boolean;
-  /** True only when in (local) free trial. */
   isTrial: boolean;
-  /** True when paid sub is active or trialing or canceled-with-grace. */
   paidActive: boolean;
-  /** Days left of trial / paid period (whichever applies). */
   daysLeft: number;
-  /** Status string from Stripe ('active'|'trialing'|'canceled'|'past_due'|'none'|null). */
   status: string | null;
-  /** End-of-period (paid) date. */
   periodEnd: Date | null;
-  /** Whether the paid sub is set to cancel at period end. */
   cancelAtPeriodEnd: boolean;
-};
-
-const readTrialEnd = (): number | null => {
-  try {
-    const raw = localStorage.getItem(TRIAL_KEY);
-    if (!raw) return null;
-    const t = Number(raw);
-    if (!Number.isFinite(t)) return null;
-    if (Date.now() >= t) {
-      localStorage.removeItem(TRIAL_KEY);
-      return null;
-    }
-    return t;
-  } catch {
-    return null;
-  }
 };
 
 const computeDaysLeft = (target: number | Date | null): number => {
@@ -56,19 +30,15 @@ const computeDaysLeft = (target: number | Date | null): number => {
 
 const isPaidActive = (sub: SubRow | null): boolean => {
   if (!sub) return false;
-  if (sub.status === "active" || sub.status === "trialing" || sub.status === "past_due") return true;
-  if (sub.status === "canceled" && sub.current_period_end) {
-    return new Date(sub.current_period_end).getTime() > Date.now();
-  }
-  return false;
+  if (["active", "trialing", "past_due"].includes(sub.status)) return true;
+  return sub.status === "canceled" && !!sub.current_period_end && new Date(sub.current_period_end).getTime() > Date.now();
 };
 
 export const usePremium = () => {
   const { user } = useAuth();
   const [sub, setSub] = useState<SubRow | null>(null);
-  const [trialEndsAt, setTrialEndsAt] = useState<number | null>(readTrialEnd());
+  const [trialEndsAt, setTrialEndsAt] = useState<number | null>(null);
   const refreshing = useRef(false);
-
   const env = hasStripeToken() ? getStripeEnvironment() : "sandbox";
 
   const loadSub = useCallback(async () => {
@@ -87,53 +57,66 @@ export const usePremium = () => {
     setSub((data as SubRow | null) ?? null);
   }, [user, env]);
 
-  /** Calls check-subscription edge function to sync from Stripe, then reloads row. */
+  const loadTrial = useCallback(async () => {
+    if (!user) {
+      setTrialEndsAt(null);
+      return;
+    }
+    const { data, error } = await (supabase.from("profiles") as any)
+      .select("trial_ends_at")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (error) {
+      // Graceful during a rolling deploy before the database migration lands.
+      setTrialEndsAt(null);
+      return;
+    }
+    const iso = data?.trial_ends_at as string | null | undefined;
+    setTrialEndsAt(iso ? new Date(iso).getTime() : null);
+  }, [user]);
+
   const refresh = useCallback(async () => {
     if (refreshing.current) return;
     refreshing.current = true;
     try {
       if (user && hasStripeToken()) {
-        // Re-check session right before invoking — `user` from React state can lag
-        // behind a logout, leaving the function call without a valid Authorization header (401).
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
-          await fetch("/api/check-subscription", { method: "POST", headers: { "Authorization": `Bearer ${session.access_token}`, "Content-Type": "application/json" }, body: JSON.stringify({ environment: env }) }).catch(() => {});
+          await fetch("/api/check-subscription", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ environment: env }),
+          }).catch(() => {});
         }
       }
-      await loadSub();
-      setTrialEndsAt(readTrialEnd());
+      await Promise.all([loadSub(), loadTrial()]);
     } finally {
       refreshing.current = false;
     }
-  }, [user, env, loadSub]);
+  }, [user, env, loadSub, loadTrial]);
 
   useEffect(() => {
-    loadSub();
-  }, [loadSub]);
+    void Promise.all([loadSub(), loadTrial()]);
+  }, [loadSub, loadTrial]);
 
-  // Refresh on window focus + every 60s for trial countdown.
   useEffect(() => {
-    const onFocus = () => refresh();
+    const onFocus = () => void refresh();
     window.addEventListener("focus", onFocus);
-    const id = window.setInterval(() => setTrialEndsAt(readTrialEnd()), 60_000);
+    const id = window.setInterval(() => {
+      setTrialEndsAt((current) => current && current <= Date.now() ? current : current);
+    }, 60_000);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.clearInterval(id);
     };
   }, [refresh]);
 
-  // NOTE: Realtime on subscriptions removed for security — billing data should
-  // not be broadcast through the realtime channel. We rely on focus + 60s
-  // polling above, plus an explicit refresh() after checkout returns.
-
   const paidActive = isPaidActive(sub);
-  const isTrialOnly = !paidActive && !!trialEndsAt;
+  const activeTrial = !!trialEndsAt && trialEndsAt > Date.now();
+  const isTrialOnly = !paidActive && activeTrial;
   const premium = paidActive || isTrialOnly;
-
   const periodEnd = sub?.current_period_end ? new Date(sub.current_period_end) : null;
-  const daysLeft = paidActive
-    ? computeDaysLeft(periodEnd)
-    : computeDaysLeft(trialEndsAt);
+  const daysLeft = paidActive ? computeDaysLeft(periodEnd) : computeDaysLeft(trialEndsAt);
 
   const state: PremiumState = {
     premium,
@@ -145,66 +128,61 @@ export const usePremium = () => {
     cancelAtPeriodEnd: !!sub?.cancel_at_period_end,
   };
 
-  const startTrial = useCallback(() => {
-    const end = Date.now() + TRIAL_DAYS * 86_400_000;
-    try {
-      localStorage.setItem(TRIAL_KEY, String(end));
-    } catch {
-      /* ignore */
+  const startTrial = useCallback(async () => {
+    if (!user) throw new Error("Meld je eerst aan om je gratis proefperiode te starten");
+    const { data, error } = await (supabase.rpc as any)("start_trial");
+    if (error) {
+      const used = /already used/i.test(error.message || "");
+      throw new Error(used ? "Je gratis proefperiode werd al gebruikt" : (error.message || "Proefperiode kon niet starten"));
     }
+    const iso = Array.isArray(data) ? data[0] : data;
+    const end = iso ? new Date(String(iso)).getTime() : null;
     setTrialEndsAt(end);
-  }, []);
+    await loadTrial();
+    return end;
+  }, [user, loadTrial]);
 
-  const cancelTrial = useCallback(() => {
-    try {
-      localStorage.removeItem(TRIAL_KEY);
-    } catch {
-      /* ignore */
-    }
-    setTrialEndsAt(null);
-  }, []);
+  const cancelTrial = useCallback(async () => {
+    if (!user) return;
+    const { error } = await (supabase.rpc as any)("cancel_trial");
+    if (error) throw new Error(error.message || "Proefperiode kon niet worden gestopt");
+    await loadTrial();
+  }, [user, loadTrial]);
 
-  /** Backwards-compat. true → start trial, false → cancel trial. */
-  const setPremium = useCallback(
-    (value: boolean) => {
-      if (value) startTrial();
-      else cancelTrial();
-    },
-    [startTrial, cancelTrial],
-  );
+  const setPremium = useCallback(async (value: boolean) => {
+    if (value) await startTrial();
+    else await cancelTrial();
+  }, [startTrial, cancelTrial]);
 
-  const openCheckout = useCallback(
-    async (plan: Plan): Promise<{ clientSecret: string } | null> => {
-      if (!user) throw new Error("Niet aangemeld");
-      if (!hasStripeToken()) throw new Error("Betalingen nog niet ingeschakeld");
-      const priceId = plan === "monthly" ? "premium_monthly" : "premium_yearly";
-      const returnUrl = `${window.location.origin}/premium?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${session?.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId, returnUrl, environment: env }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Checkout kon niet starten");
-      if (!data?.clientSecret) throw new Error("Checkout kon niet starten");
-      return { clientSecret: data.clientSecret as string };
-    },
-    [user, env],
-  );
+  const openCheckout = useCallback(async (plan: Plan): Promise<{ clientSecret: string } | null> => {
+    if (!user) throw new Error("Niet aangemeld");
+    if (!hasStripeToken()) throw new Error("Betalingen nog niet ingeschakeld");
+    const priceId = plan === "monthly" ? "premium_monthly" : "premium_yearly";
+    const returnUrl = `${window.location.origin}/premium?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Je sessie is verlopen. Meld je opnieuw aan.");
+    const res = await fetch("/api/checkout", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ priceId, returnUrl, environment: env }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.clientSecret) throw new Error(data?.error || "Checkout kon niet starten");
+    return { clientSecret: data.clientSecret as string };
+  }, [user, env]);
 
   const openPortal = useCallback(async () => {
     if (!user) throw new Error("Niet aangemeld");
     const returnUrl = `${window.location.origin}/premium`;
     const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Je sessie is verlopen. Meld je opnieuw aan.");
     const res = await fetch("/api/customer-portal", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${session?.access_token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ environment: env, returnUrl }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Portaal kon niet openen");
-    if (!data?.url) throw new Error("Portaal kon niet openen");
+    if (!res.ok || !data?.url) throw new Error(data?.error || "Portaal kon niet openen");
     window.open(data.url as string, "_blank", "noopener,noreferrer");
   }, [user, env]);
 
