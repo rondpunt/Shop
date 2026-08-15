@@ -1,4 +1,5 @@
-import { Activity, Clock3, MessageCircle, Users } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, Clock3, LogIn, MessageCircle, Users, XCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useCommunityForecast } from "@/hooks/useCommunityForecast";
 import { useSpotReports } from "@/hooks/useSpotReports";
 import { cn } from "@/lib/utils";
@@ -12,7 +13,7 @@ type Props = {
 
 export const ZoneIntelligence = ({ spotId, freeBays, totalBays, compact = false }: Props) => {
   const { forecast } = useCommunityForecast(spotId);
-  const { signal } = useSpotReports(spotId);
+  const { signal, canSubmit, submit, submitting } = useSpotReports(spotId);
   const soon5 = forecast?.departing_5m ?? 0;
   const soon10 = forecast?.departing_10m ?? 0;
   const incoming = soon5 + soon10;
@@ -26,7 +27,7 @@ export const ZoneIntelligence = ({ spotId, freeBays, totalBays, compact = false 
         </span>
         {incoming > 0 && (
           <span className="smart-chip smart-chip-soon">
-            <Clock3 className="h-3.5 w-3.5" /> {incoming} mogelijk binnen 10 min
+            <Clock3 className="h-3.5 w-3.5" /> {incoming} mogelijk ≤10 min
           </span>
         )}
         {communityFresh && (
@@ -39,14 +40,14 @@ export const ZoneIntelligence = ({ spotId, freeBays, totalBays, compact = false 
   }
 
   return (
-    <section className="mt-4 overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.055] p-4 backdrop-blur-xl">
+    <section className="mt-4 overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.055] p-4 backdrop-blur-xl">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/45">Live inzicht</div>
-          <h3 className="mt-1 text-[15px] font-bold text-white">Wat gebeurt hier nu?</h3>
+          <h3 className="mt-1 text-[15px] font-bold text-white">Parko + bestuurders</h3>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/12 px-2.5 py-1 text-[10px] font-bold text-primary ring-1 ring-primary/20">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary pulse-dot" /> Parko + community
+          <span className="h-1.5 w-1.5 rounded-full bg-primary pulse-dot" /> live
         </span>
       </div>
 
@@ -60,9 +61,24 @@ export const ZoneIntelligence = ({ spotId, freeBays, totalBays, compact = false 
         <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
         <span>
           {communityFresh
-            ? `${signal.label}${signal.freshness ? ` · ${signal.freshness}` : ""}. Communitysignalen zijn indicatief; de live Parko-sensoren blijven leidend.`
-            : "Nog geen recente communitymelding. De aantallen hierboven komen primair uit de live Parko-sensoren; vertrektijden zijn alleen een verwachting op basis van app-timers."}
+            ? `${signal.label}${signal.freshness ? ` · ${signal.freshness}` : ""}. Communitysignalen zijn indicatief; de officiële Parko-sensoren blijven leidend.`
+            : "Nog geen recente melding. 'Kan vrijkomen' wordt alleen afgeleid van actieve app-timers en is geen reservatie of garantie."}
         </span>
+      </div>
+
+      <div className="mt-3">
+        <div className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.16em] text-white/35">Wat zie jij?</div>
+        {canSubmit ? (
+          <div className="grid grid-cols-3 gap-2">
+            <SignalButton disabled={submitting} onClick={() => submit({ status: "free" })} icon={CheckCircle2} label="Net vrij" tone="good" />
+            <SignalButton disabled={submitting} onClick={() => submit({ status: "busy" })} icon={AlertTriangle} label="Druk" tone="soon" />
+            <SignalButton disabled={submitting} onClick={() => submit({ status: "full" })} icon={XCircle} label="Vol" tone="bad" />
+          </div>
+        ) : (
+          <Link to="/sync" className="flex min-h-[42px] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] text-[11px] font-bold text-white/65 active:scale-[0.99]">
+            <LogIn className="h-3.5 w-3.5" /> Log in om een melding te delen
+          </Link>
+        )}
       </div>
     </section>
   );
@@ -74,4 +90,10 @@ const Metric = ({ label, value, sub, tone }: { label: string; value: string; sub
     <div className={cn("mt-1 font-display text-[24px] leading-none", tone === "good" && "text-primary", tone === "bad" && "text-destructive", tone === "soon" && "text-warning", tone === "plain" && "text-white")}>{value}</div>
     <div className="mt-1 text-[9.5px] font-medium text-white/38">{sub}</div>
   </div>
+);
+
+const SignalButton = ({ icon: Icon, label, tone, ...props }: { icon: typeof Activity; label: string; tone: "good" | "soon" | "bad"; disabled: boolean; onClick: () => void }) => (
+  <button {...props} type="button" className={cn("flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-2xl border text-[10px] font-extrabold uppercase tracking-wide transition active:scale-[0.97] disabled:opacity-50", tone === "good" && "border-primary/25 bg-primary/10 text-primary", tone === "soon" && "border-warning/25 bg-warning/10 text-warning", tone === "bad" && "border-destructive/25 bg-destructive/10 text-destructive")}>
+    <Icon className="h-4 w-4" /> {label}
+  </button>
 );
