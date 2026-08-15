@@ -138,16 +138,12 @@ const History = () => {
 
 const SessionCard = ({ row }: { row: Session }) => {
   const start = new Date(row.started_at);
-  const isActive = !row.ended_at;
-  const end = row.ended_at ? new Date(row.ended_at) : null;
+  const timerEnd = new Date(row.ends_at);
+  const running = !row.ended_at && timerEnd.getTime() > Date.now();
+  const expiredOpen = !row.ended_at && !running;
+  const end = row.ended_at ? new Date(row.ended_at) : expiredOpen ? timerEnd : null;
   const minutes = end ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000)) : 0;
-
-  // Status:
-  //  - active session (no ended_at, or zero duration): green pulsing "● Actief"
-  //  - ended ≤ 30 min: green "✅ Op tijd"
-  //  - ended > 30 min: red "⚠️ Te laat"
-  const showActive = isActive || minutes === 0;
-  const onTime = !showActive && minutes <= 30;
+  const onTime = !!row.ended_at && minutes <= 30;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
@@ -163,7 +159,7 @@ const SessionCard = ({ row }: { row: Session }) => {
             <span className="font-semibold">
               {start.toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" })}
             </span>
-            {showActive ? (
+            {running ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-success">
                 <Clock className="h-3 w-3" /> Actief
               </span>
@@ -187,7 +183,7 @@ const SessionCard = ({ row }: { row: Session }) => {
           )}
 
           <div className="mt-2">
-            {showActive ? (
+            {running ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-0.5 text-[11px] font-bold text-success">
                 <span className="h-1.5 w-1.5 rounded-full bg-success pulse-dot" />
                 Actief

@@ -25,6 +25,7 @@ export type LocalSession = {
   address: string | null;
   note: string | null;
   photo_dataurl: string | null;
+  spot_id: string | null;
 };
 
 const safeRead = (key: string): string | null => {
@@ -145,6 +146,7 @@ export const localStore = {
       address: input.address ?? null,
       note: input.note ?? null,
       photo_dataurl: input.photo_dataurl ?? null,
+      spot_id: input.spot_id ?? null,
     };
     sessions.unshift(session);
     localStore.setSessions(sessions);

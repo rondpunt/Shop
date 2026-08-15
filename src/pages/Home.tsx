@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, MapPin, Loader2, ChevronDown, ChevronUp, ChevronRight, Car } from "lucide-react";
+import { Search, MapPin, Loader2, ChevronDown, ChevronUp, ChevronRight, Car, Navigation } from "lucide-react";
 import { useParkoLive, type ParkoZone } from "@/hooks/useParkoLive";
 import { useDataSource } from "@/hooks/useDataSource";
 import { NearbyMap } from "@/components/NearbyMap";
@@ -8,6 +8,7 @@ import { distKm, driveMin, formatDist, navigateTo } from "@/lib/parko";
 import { cn } from "@/lib/utils";
 import { AppHeader } from "@/components/AppHeader";
 import { HomeSessionWidget } from "@/components/HomeSessionWidget";
+import { ZoneIntelligence } from "@/components/ZoneIntelligence";
 import { StartTimerSheet } from "@/components/StartTimerSheet";
 import { ensureNotificationPermission, scheduleSessionAlarms } from "@/lib/notifications";
 import { SHOPGO_DURATION_SEC } from "@/lib/format";
@@ -219,8 +220,8 @@ const Home = () => {
         onTouchEnd={handleTouchEnd}
         className="pb-safe absolute left-0 right-0 z-20 mx-auto max-w-md rounded-t-[28px] bg-card text-card-foreground shadow-sheet transition-all duration-300 ease-out flex flex-col"
         style={{
-          bottom: "64px", // height of bottom nav
-          height: sheetState === 0 ? "140px" : sheetState === 1 ? "340px" : "calc(100dvh - 84px)",
+          bottom: "calc(env(safe-area-inset-bottom) + 72px)",
+          height: sheetState === 0 ? "140px" : sheetState === 1 ? "390px" : "calc(100dvh - 92px)",
         }}
       >
         {/* Drag handle */}
@@ -242,7 +243,7 @@ const Home = () => {
             </h2>
             {sheetState > 0 && parko && !parkoLoading && !parkoError && (
               <span className="flex items-center gap-1.5 text-[11px] font-bold text-success">
-                Live · zojuist vernieuwd <span className="h-2 w-2 rounded-full bg-success pulse-dot" />
+                Live · {fetchedLabel || "zojuist"} <span className="h-2 w-2 rounded-full bg-success pulse-dot" />
               </span>
             )}
           </div>
@@ -274,7 +275,7 @@ const Home = () => {
               <div className={cn("transition-opacity duration-200 flex flex-col h-full", sheetState === 1 ? "opacity-100" : "hidden pointer-events-none")}>
                 {recommended ? (
                   <>
-                    <div className="card-soft p-4 w-full text-left relative">
+                    <div className="best-map-card rounded-[24px] p-4 w-full text-left relative">
                       {recommended.z.freeBays > 0 && (
                         <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
                           Beste keuze nu
@@ -297,22 +298,30 @@ const Home = () => {
                         </div>
                       )}
 
-                      {recommended.z.freeBays > 0 && (
+                      <ZoneIntelligence
+                        spotId={`parko:${recommended.z.id}`}
+                        freeBays={recommended.z.freeBays}
+                        totalBays={recommended.z.totalBays}
+                        compact
+                      />
+
+                      <div className="mt-4 grid grid-cols-[0.85fr_1.35fr] gap-2">
                         <button
                           type="button"
-                          onClick={() => {
-                            if (!activeSession) {
-                              setShowStartSheet(true);
-                            } else {
-                              toast.info("Sessie loopt al");
-                            }
-                          }}
-                          disabled={starting}
-                          className="mt-4 flex min-h-[44px] w-full items-center justify-center gap-1 rounded-xl bg-primary px-3 text-[15px] font-bold text-primary-foreground shadow-glow-mint active:scale-[0.98] transition-transform"
+                          onClick={() => navigateTo(recommended.z)}
+                          className="flex min-h-[46px] items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-[13px] font-extrabold text-slate-700 active:scale-[0.98]"
                         >
-                          {starting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Navigeer →"}
+                          <Navigation className="h-4 w-4" /> Route
                         </button>
-                      )}
+                        <button
+                          type="button"
+                          onClick={() => activeSession ? toast.info("Er loopt al een sessie") : setShowStartSheet(true)}
+                          disabled={starting || recommended.z.freeBays === 0}
+                          className="flex min-h-[46px] items-center justify-center gap-2 rounded-2xl bg-primary px-3 text-[14px] font-extrabold text-primary-foreground shadow-glow-mint transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
+                        >
+                          {starting ? <Loader2 className="h-5 w-5 animate-spin" /> : recommended.z.freeBays > 0 ? "Ik sta hier · start 30 min" : "Nu vol"}
+                        </button>
+                      </div>
                     </div>
 
                     <div className="mt-auto pt-3 flex justify-center pb-2">
@@ -372,7 +381,7 @@ const Home = () => {
                     </div>
                     {z.freeBays > 0 && (
                        <div className="flex h-[36px] items-center justify-center gap-1 rounded-xl bg-primary px-3 text-[12px] font-bold text-primary-foreground shrink-0 shadow-glow-mint">
-                         Navigeer <ChevronRight className="h-3 w-3" />
+                         Bekijk <ChevronRight className="h-3 w-3" />
                        </div>
                     )}
                   </button>

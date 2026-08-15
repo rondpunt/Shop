@@ -49,6 +49,7 @@ const fromLocalSession = (s: LocalSession, cars: LocalCar[]): Session => {
     address: s.address,
     note: s.note,
     photo_url: s.photo_dataurl,
+    spot_id: s.spot_id ?? null,
     car: car ? { name: car.name, plate: car.plate, color_hex: car.color_hex } : null,
   };
 };
@@ -77,7 +78,7 @@ export const useDataSource = () => {
       supabase
         .from("sessions")
         .select(
-          "id, car_id, started_at, ends_at, ended_at, lat, lng, address, note, photo_url, cars(name, plate, color_hex)"
+          "id, car_id, started_at, ends_at, ended_at, lat, lng, address, note, photo_url, spot_id, cars(name, plate, color_hex)"
         )
         .order("started_at", { ascending: false })
         .limit(200),
@@ -180,7 +181,7 @@ export const useDataSource = () => {
         .from("sessions")
         .insert({ ...input, user_id: user.id })
         .select(
-          "id, car_id, started_at, ends_at, ended_at, lat, lng, address, note, photo_url, cars(name, plate, color_hex)"
+          "id, car_id, started_at, ends_at, ended_at, lat, lng, address, note, photo_url, spot_id, cars(name, plate, color_hex)"
         )
         .single();
       if (error) throw error;
@@ -222,7 +223,7 @@ export const useDataSource = () => {
       const { data, error } = await supabase
         .from("sessions")
         .select(
-          "id, car_id, started_at, ends_at, ended_at, lat, lng, address, note, photo_url, cars(name, plate, color_hex)"
+          "id, car_id, started_at, ends_at, ended_at, lat, lng, address, note, photo_url, spot_id, cars(name, plate, color_hex)"
         )
         .eq("id", id)
         .maybeSingle();

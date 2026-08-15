@@ -10,8 +10,7 @@ import { ensureNotificationPermission, scheduleSessionAlarms } from "@/lib/notif
 import { StartTimerSheet } from "@/components/StartTimerSheet";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { getPredictiveAvailability, getPredictionLabel } from "@/lib/predictive";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { ZoneIntelligence } from "@/components/ZoneIntelligence";
 
 const LocationDetail = () => {
   const { id = "" } = useParams();
@@ -149,6 +148,12 @@ const LocationDetail = () => {
           Live · bijgewerkt {new Date(parko.fetchedAt).toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" })}
         </div>
 
+        <ZoneIntelligence
+          spotId={`parko:${zone.id}`}
+          freeBays={zone.freeBays}
+          totalBays={zone.totalBays}
+        />
+
         {d !== null && (
           <div className="mt-3 rounded-xl bg-muted px-4 py-3">
             <div className="text-[14px] font-semibold text-foreground">
@@ -162,18 +167,18 @@ const LocationDetail = () => {
 
         <button
           type="button"
-          onClick={() => navigateTo(zone)}
-          className="btn-pill-primary mt-4 w-full"
+          disabled={!!activeSession || starting || zone.freeBays === 0}
+          onClick={() => setShowStartSheet(true)}
+          className="btn-pill-primary mt-5 w-full disabled:opacity-45 disabled:shadow-none"
         >
-          Navigeer →
+          <Play className="h-4 w-4 fill-current" /> {activeSession ? "Sessie loopt al" : zone.freeBays > 0 ? "Ik parkeer hier · start 30 min" : "Momenteel vol"}
         </button>
         <button
           type="button"
-          disabled={!!activeSession || starting || zone.freeBays === 0}
-          onClick={() => setShowStartSheet(true)}
+          onClick={() => navigateTo(zone)}
           className="btn-pill-outline mt-2 w-full"
         >
-          <Play className="h-4 w-4 fill-current" /> Start 30 min
+          Navigeer naar deze locatie →
         </button>
         <button
           type="button"
