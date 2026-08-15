@@ -28,7 +28,7 @@ jobs:
           npm install --save-exact react-router-dom@6.30.4
           npm audit fix || true
           npm audit --omit=dev --audit-level=high
-      - name: Commit and rebase lockfile-safe security updates
+      - name: Commit and safely publish lockfile updates
         run: |
           git config user.name "shopgo-release-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -37,5 +37,13 @@ jobs:
             exit 0
           fi
           git commit -m "security: update vulnerable npm dependencies"
-          git pull --rebase origin import-parkv3-clean
-          git push origin HEAD:import-parkv3-clean
+          for attempt in 1 2 3 4 5; do
+            git fetch origin import-parkv3-clean
+            git rebase origin/import-parkv3-clean
+            if git push origin HEAD:import-parkv3-clean; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Unable to publish dependency update after retries" >&2
+          exit 1
