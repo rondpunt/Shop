@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Search, MapPin, Loader2, ChevronDown, ChevronUp, ChevronRight, Car, Navigation } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { Search, MapPin, Loader2, ChevronDown, ChevronUp, Car } from "lucide-react";
 import { useParkoLive, type ParkoZone } from "@/hooks/useParkoLive";
 import { useDataSource } from "@/hooks/useDataSource";
 import { NearbyMap } from "@/components/NearbyMap";
@@ -8,182 +8,189 @@ import { distKm, driveMin, formatDist, navigateTo } from "@/lib/parko";
 import { cn } from "@/lib/utils";
 import { AppHeader } from "@/components/AppHeader";
 import { HomeSessionWidget } from "@/components/HomeSessionWidget";
-import { ZoneIntelligence } from "@/components/ZoneIntelligence";
-import { StartTimerSheet } from "@/components/StartTimerSheet";
-import { ensureNotificationPermission, scheduleSessionAlarms } from "@/lib/notifications";
-import { SHOPGO_DURATION_SEC } from "@/lib/format";
-import { toast } from "sonner";
-import { useReminderPref } from "@/hooks/useReminderPref";
-import { Logger } from "@/lib/logger";
-
-const KORTRIJK_CENTER = { lat: 50.8276, lng: 3.2659 };
 
 type SheetState = 0 | 1 | 2;
+type ZoneWithDistance = { z: ParkoZone; d: number | null };
+
+const availabilityText = (zone: ParkoZone) => {
+  if (zone.freeBays <= 0) return "Geen vrije plaatsen";
+  return zone.freeBays === 1 ? "1 vrije plaats" : `${zone.freeBays} vrije plaatsen`;
+};
+
+const locationCountText = (count: number) => {
+  if (count === 0) return "Geen vrije locaties";
+  return count === 1 ? "1 locatie beschikbaar" : `${count} locaties beschikbaar`;
+};
 
 const Home = () => {
-  const navigate = useNavigate();
-  const { data: parko, loading: parkoLoading, error: parkoError } = useParkoLive();
-  const { activeSession, startSession, cars } = useDataSource();
-  const { prefs } = useReminderPref();
+  const {
+    data: parko,
+    loading: parkoLoading,
+    refreshing: parkoRefreshing,
+    error: parkoError,
+    refresh: refreshParko,
+  } = useParkoLive();
+  const { activeSession } = useDataSource();
 
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [address, setAddress] = useState("Kortrijk centrum");
-
-  // Sheet states
+  const [address] = useState("Kortrijk centrum");
   const [sheetState, setSheetState] = useState<SheetState>(1);
-  const sheetRef = useRef<HTMLDivElement>(null);
-
-  const [showStartSheet, setShowStartSheet] = useState(false);
-  const [starting, setStarting] = useState(false);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
-  // Get user location
+  const touchStartY = useRef(0);
+  const touchScrollTop = useRef(0);
+  const [dragDelta, setDragDelta] = useState(0);
+  const [dragging, setDragging] = useState(false);
+
   useEffect(() => {
     if (!("geolocation" in navigator)) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => {},
-      { enableHighAccuracy: true, timeout: 10_000 }
+      { enableHighAccuracy: true, timeout: 10_000 },
     );
   }, []);
 
-  // Compute sorted zones
-  const sortedZones = useMemo(() => {
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Best choice: currently free first, then nearest; more free bays break ties.
+  // This is a deterministic ranking, not a made-up probability score.
+  const sortedZones = useMemo<ZoneWithDistance[]>(() => {
     if (!parko?.zones) return [];
     return parko.zones
       .map((z) => ({ z, d: coords ? distKm(coords, z) : null }))
       .sort((a, b) => {
-        // Only free spots
-        if (a.z.freeBays === 0 && b.z.freeBays > 0) return 1;
-        if (b.z.freeBays === 0 && a.z.freeBays > 0) return -1;
-        if (a.d === null || b.d === null) return b.z.freeBays - a.z.freeBays;
-        return a.d - b.d;
+        const aFree = a.z.freeBays > 0;
+        const bFree = b.z.freeBays > 0;
+        if (aFree !== bFree) return aFree ? -1 : 1;
+
+        if (a.d !== null && b.d !== null && Math.abs(a.d - b.d) > 0.03) {
+          return a.d - b.d;
+        }
+        if (a.z.freeBays !== b.z.freeBays) return b.z.freeBays - a.z.freeBays;
+        if (a.d !== null && b.d !== null) return a.d - b.d;
+        return a.z.name.localeCompare(b.z.name, "nl");
       });
   }, [parko?.zones, coords]);
 
-  // Set default selected zone to the best one on load or when data changes
+  const bestChoice = sortedZones[0] ?? null;
+
   useEffect(() => {
-    if (sortedZones.length > 0 && !selectedZoneId && parko) {
-      setSelectedZoneId(sortedZones[0].z.id);
-    } else if (sortedZones.length > 0 && selectedZoneId) {
-       const currentSelected = sortedZones.find(s => s.z.id === selectedZoneId);
-       if (currentSelected && currentSelected.z.freeBays === 0 && sortedZones[0].z.freeBays > 0) {
-         setSelectedZoneId(sortedZones[0].z.id);
-       }
+    if (!bestChoice) {
+      setSelectedZoneId(null);
+      return;
     }
-  }, [sortedZones, selectedZoneId, parko]);
 
-  const recommended = useMemo(() => {
-    if (selectedZoneId) {
-       return sortedZones.find(s => s.z.id === selectedZoneId) || sortedZones[0];
+    if (!selectedZoneId) {
+      setSelectedZoneId(bestChoice.z.id);
+      return;
     }
-    return sortedZones[0];
-  }, [sortedZones, selectedZoneId]);
 
-  // Handle Touch for Sheet Dragging
-  const touchStartY = useRef(0);
+    const selected = sortedZones.find(({ z }) => z.id === selectedZoneId);
+    // Respect a manual choice while it is still free. Switch automatically when it becomes full.
+    if (!selected || (selected.z.freeBays === 0 && bestChoice.z.freeBays > 0)) {
+      setSelectedZoneId(bestChoice.z.id);
+    }
+  }, [bestChoice, selectedZoneId, sortedZones]);
+
+  const selected = useMemo(() => {
+    if (!selectedZoneId) return bestChoice;
+    return sortedZones.find(({ z }) => z.id === selectedZoneId) ?? bestChoice;
+  }, [bestChoice, selectedZoneId, sortedZones]);
+
+  const freeLocationCount = sortedZones.filter(({ z }) => z.freeBays > 0).length;
+  const otherFreeLocations = Math.max(
+    0,
+    freeLocationCount - (selected?.z.freeBays && selected.z.freeBays > 0 ? 1 : 0),
+  );
+
+  const liveLabel = useMemo(() => {
+    if (parkoRefreshing) return "Live · bijwerken…";
+    if (!parko?.fetchedAt) return "Live";
+    const ageSeconds = Math.max(0, Math.floor((now - new Date(parko.fetchedAt).getTime()) / 1_000));
+    if (ageSeconds <= 5) return "Live · zojuist vernieuwd";
+    if (ageSeconds < 60) return `Live · ${ageSeconds} sec geleden`;
+    const minutes = Math.floor(ageSeconds / 60);
+    return `Live · ${minutes} min geleden`;
+  }, [now, parko?.fetchedAt, parkoRefreshing]);
+
+  const sheetHeight =
+    sheetState === 0
+      ? "112px"
+      : sheetState === 1
+        ? "clamp(286px, 38dvh, 322px)"
+        : "calc(100dvh - 86px)";
+
+  const mapBottomPadding = sheetState === 0 ? 150 : sheetState === 1 ? 335 : 500;
+
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
-  };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const touchEndY = e.changedTouches[0].clientY;
-    const delta = touchEndY - touchStartY.current;
-    
-    // Check if we are scrolling inside the list
-    const target = e.target as HTMLElement;
-    const scrollContainer = target.closest('.sheet-scroll-area');
-    if (scrollContainer && scrollContainer.scrollTop > 0 && delta > 0) {
-      return; // let native scroll happen
-    }
-
-    if (delta < -40) {
-      // swipe up
-      setSheetState(s => (s < 2 ? (s + 1) as SheetState : s));
-    } else if (delta > 40) {
-      // swipe down
-      setSheetState(s => (s > 0 ? (s - 1) as SheetState : s));
-    }
+    const scrollArea = (e.target as HTMLElement).closest(".sheet-scroll-area") as HTMLElement | null;
+    touchScrollTop.current = scrollArea?.scrollTop ?? 0;
+    setDragging(true);
+    setDragDelta(0);
   };
 
-  const confirmStart = async (remindBeforeMin: number) => {
-    if (!recommended) return;
-    setStarting(true);
-    try {
-      const wantsReminder = remindBeforeMin > 0;
-      const granted = wantsReminder ? await ensureNotificationPermission() : false;
-      if (wantsReminder && !granted) {
-        toast.warning("Meldingen staan uit", {
-          description: "Zonder meldingen krijg je geen alarm bij vergrendeld scherm.",
-        });
-      }
-      const startedAt = new Date();
-      const endsAt = new Date(startedAt.getTime() + SHOPGO_DURATION_SEC * 1000);
-      const sessionAddress = recommended.z.name;
-      const defaultCar = cars.find((c) => c.is_default) ?? cars[0];
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const raw = e.touches[0].clientY - touchStartY.current;
 
-      const session = await startSession({
-        car_id: defaultCar?.id ?? null,
-        started_at: startedAt.toISOString(),
-        ends_at: endsAt.toISOString(),
-        lat: recommended.z.lat,
-        lng: recommended.z.lng,
-        address: sessionAddress,
-        spot_id: `parko:${recommended.z.id}`,
-      });
+    // In the fully-open state, upward gestures belong to the list scroll.
+    if (sheetState === 2 && (raw < 0 || touchScrollTop.current > 0)) return;
 
-      if (granted && wantsReminder) {
-        await scheduleSessionAlarms({
-          sessionId: session.id,
-          endsAt,
-          remindBeforeMin,
-          locationLabel: sessionAddress?.split(",")[0]?.trim(),
-        });
-      }
-
-      Logger.info("TIMER", `Timer session ${session.id} started successfully`, { address: sessionAddress });
-      setShowStartSheet(false);
-      navigate(`/session/${session.id}`);
-    } catch (e: any) {
-      toast.error("Kon sessie niet starten", { description: e?.message });
-    } finally {
-      setStarting(false);
-    }
+    const clamped =
+      sheetState === 0
+        ? Math.max(-120, Math.min(0, raw))
+        : sheetState === 2
+          ? Math.max(0, Math.min(120, raw))
+          : Math.max(-120, Math.min(120, raw));
+    setDragDelta(clamped);
   };
 
-  const freeCount = sortedZones.filter(z => z.z.freeBays > 0).length;
-  
-  const fetchedLabel = parko?.fetchedAt 
-    ? new Date(parko.fetchedAt).toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) 
-    : "";
+  const handleTouchEnd = () => {
+    if (dragDelta < -45) {
+      setSheetState((s) => (s < 2 ? ((s + 1) as SheetState) : s));
+    } else if (dragDelta > 45) {
+      setSheetState((s) => (s > 0 ? ((s - 1) as SheetState) : s));
+    }
+    setDragDelta(0);
+    setDragging(false);
+  };
+
+  const selectZone = (zone: ParkoZone) => {
+    setSelectedZoneId(zone.id);
+    setSheetState(1);
+  };
 
   return (
     <div className="relative h-[100dvh] w-full overflow-hidden bg-deep">
-      {/* Fullscreen map */}
       <div className="absolute inset-0">
         <NearbyMap
           userCoords={coords}
           zones={parko?.zones ?? []}
-          recommendedZoneId={recommended?.z.id ?? null}
-          onZoneTap={(z) => {
-            setSelectedZoneId(z.id);
-            setSheetState(1); // half open when selecting a marker
-          }}
+          recommendedZoneId={selected?.z.id ?? null}
+          onZoneTap={selectZone}
           height="100%"
           showFilters={false}
+          initialFilter="all"
+          bottomPadding={mapBottomPadding}
         />
       </div>
 
-      {/* Floating header */}
       <AppHeader floating />
 
-      {/* Search bar + chip */}
-      <div className="pt-safe absolute left-0 right-0 z-20 px-3 transition-transform duration-300 ease-out" 
-           style={{ 
-             top: "calc(env(safe-area-inset-top) + 44px)",
-             transform: sheetState === 2 ? "translateY(-200%)" : "translateY(0)",
-             opacity: sheetState === 2 ? 0 : 1,
-             pointerEvents: sheetState === 2 ? 'none' : 'auto'
-           }}>
+      <div
+        className="pt-safe absolute left-0 right-0 z-20 px-3 transition-all duration-300 ease-out"
+        style={{
+          top: "calc(env(safe-area-inset-top) + 44px)",
+          transform: sheetState === 2 ? "translateY(-180%)" : "translateY(0)",
+          opacity: sheetState === 2 ? 0 : 1,
+          pointerEvents: sheetState === 2 ? "none" : "auto",
+        }}
+      >
         <div className="mx-auto max-w-md space-y-1.5">
           <Link
             to="/zones"
@@ -200,205 +207,228 @@ const Home = () => {
         </div>
       </div>
 
-      {/* Active-session sticky banner */}
       {activeSession && (
-        <HomeSessionWidget 
+        <HomeSessionWidget
           session={activeSession}
           className="absolute left-3 right-3 z-30 transition-all duration-300 ease-out"
-          style={{ 
-            bottom: sheetState === 0 ? "150px" : sheetState === 1 ? "350px" : "calc(100dvh - 100px)",
+          style={{
+            bottom:
+              sheetState === 0
+                ? "calc(env(safe-area-inset-bottom) + 180px)"
+                : "calc(env(safe-area-inset-bottom) + 370px)",
             opacity: sheetState === 2 ? 0 : 1,
-            pointerEvents: sheetState === 2 ? 'none' : 'auto'
+            pointerEvents: sheetState === 2 ? "none" : "auto",
           }}
         />
       )}
 
-      {/* Bottom sheet */}
       <div
-        ref={sheetRef}
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="pb-safe absolute left-0 right-0 z-20 mx-auto max-w-md rounded-t-[28px] bg-card text-card-foreground shadow-sheet transition-all duration-300 ease-out flex flex-col"
+        onTouchCancel={handleTouchEnd}
+        className={cn(
+          "pb-safe absolute left-0 right-0 z-20 mx-auto flex max-w-md flex-col rounded-t-[28px] bg-card text-card-foreground shadow-sheet",
+          dragging ? "transition-none" : "transition-[height,transform] duration-300 ease-out",
+        )}
         style={{
-          bottom: "calc(env(safe-area-inset-bottom) + 72px)",
-          height: sheetState === 0 ? "140px" : sheetState === 1 ? "390px" : "calc(100dvh - 92px)",
+          bottom: "calc(env(safe-area-inset-bottom) + 58px)",
+          height: sheetHeight,
+          transform: `translateY(${dragDelta}px)`,
         }}
       >
-        {/* Drag handle */}
-        <button 
-          onClick={() => setSheetState(s => (s < 2 ? (s + 1) as SheetState : 1))}
-          className="mx-auto w-full pt-3 pb-2 flex justify-center shrink-0 cursor-grab active:cursor-grabbing"
-          aria-label="Toggle sheet"
+        <button
+          type="button"
+          onClick={() =>
+            setSheetState((s) => (s === 0 ? 1 : s === 1 ? 2 : 1) as SheetState)
+          }
+          className="mx-auto flex w-full shrink-0 cursor-grab justify-center pb-2 pt-3 active:cursor-grabbing"
+          aria-label="Parkeeroverzicht openen of sluiten"
         >
           <div className="h-1.5 w-10 rounded-full bg-muted-foreground/30" />
         </button>
 
-        {/* Content wrapper */}
-        <div className="flex flex-col flex-1 overflow-hidden px-4">
-          
-          {/* Header Row */}
-          <div className="flex items-center justify-between shrink-0 mb-3">
-            <h2 className="text-[20px] font-bold leading-tight text-foreground">
-              {freeCount === 0 && !parkoLoading && parko ? "Geen vrije Shop&Go" : "Vrije Shop&Go"}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4">
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+            <h2 className="min-w-0 truncate text-[20px] font-bold leading-tight text-foreground">
+              {freeLocationCount === 0 && !parkoLoading && parko
+                ? "Geen vrije Shop&Go"
+                : "Vrije Shop&Go"}
             </h2>
             {sheetState > 0 && parko && !parkoLoading && !parkoError && (
-              <span className="flex items-center gap-1.5 text-[11px] font-bold text-success">
-                Live · {fetchedLabel || "zojuist"} <span className="h-2 w-2 rounded-full bg-success pulse-dot" />
-              </span>
+              <span className="shrink-0 text-[11px] font-bold text-success">{liveLabel}</span>
             )}
           </div>
 
-          {/* Body */}
           {parkoLoading && !parko ? (
-            <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 px-1 py-4 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Shop&Go laden…
             </div>
           ) : parkoError ? (
-            <div className="text-center p-4">
-              <div className="text-sm font-bold text-destructive">Beschikbaarheid tijdelijk niet beschikbaar</div>
-              <button onClick={() => window.location.reload()} className="text-xs text-muted-foreground mt-1 underline">Probeer opnieuw</button>
+            <div className="rounded-2xl bg-muted/60 p-4">
+              <div className="text-sm font-bold text-foreground">
+                Beschikbaarheid tijdelijk niet beschikbaar
+              </div>
+              <button
+                type="button"
+                onClick={() => void refreshParko()}
+                disabled={parkoRefreshing}
+                className="mt-2 text-xs font-bold text-primary disabled:opacity-60"
+              >
+                {parkoRefreshing ? "Bijwerken…" : "Probeer opnieuw"}
+              </button>
             </div>
           ) : (
-            <div className="sheet-scroll-area flex-1 overflow-y-auto pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              
-              {/* STATE 0: Collapsed - just summary */}
-              <div className={cn("transition-opacity duration-200 text-center flex flex-col h-full", sheetState === 0 ? "opacity-100" : "hidden pointer-events-none")}>
-                <div className="flex items-center justify-center gap-2 text-[15px] font-bold text-foreground">
-                  <Car className="h-4 w-4 text-primary" /> {freeCount === 0 ? `0 van ${parko?.totalBays ?? 0} plaatsen vrij` : `${parko?.totalFree ?? 0} van ${parko?.totalBays ?? 0} plaatsen vrij`}
+            <div className="sheet-scroll-area min-h-0 flex-1 overflow-y-auto pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div
+                onClick={() => setSheetState(1)}
+                className={cn(
+                  "flex h-full cursor-pointer flex-col items-center justify-center transition-opacity duration-200",
+                  sheetState === 0 ? "opacity-100" : "hidden pointer-events-none",
+                )}
+              >
+                <div className="text-[15px] font-bold text-foreground">
+                  {locationCountText(freeLocationCount)}
                 </div>
-                <div className="mt-2 text-[11px] font-semibold text-muted-foreground flex items-center justify-center gap-1">
-                  <ChevronUp className="h-3 w-3" /> Veeg omhoog voor meer ({freeCount} actieve locaties)
+                <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
+                  <ChevronUp className="h-3 w-3" /> Veeg omhoog voor beste keuze
                 </div>
               </div>
 
-              {/* STATE 1: Half open - Best location card */}
-              <div className={cn("transition-opacity duration-200 flex flex-col h-full", sheetState === 1 ? "opacity-100" : "hidden pointer-events-none")}>
-                {recommended ? (
+              <div
+                className={cn(
+                  "flex h-full flex-col transition-opacity duration-200",
+                  sheetState === 1 ? "opacity-100" : "hidden pointer-events-none",
+                )}
+              >
+                {freeLocationCount === 0 ? (
+                  <div className="rounded-2xl bg-muted/55 p-4">
+                    <div className="text-[15px] font-bold text-foreground">
+                      Er zijn momenteel geen vrije plaatsen.
+                    </div>
+                    <div className="mt-1 text-[12px] font-medium text-muted-foreground">
+                      Beschikbaarheid wordt live bijgewerkt.
+                    </div>
+                  </div>
+                ) : selected ? (
                   <>
-                    <div className="best-map-card rounded-[24px] p-4 w-full text-left relative">
-                      {recommended.z.freeBays > 0 && (
-                        <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                          Beste keuze nu
-                        </div>
+                    <div className="card-soft w-full p-4 text-left">
+                      {selected.z.id === bestChoice?.z.id && selected.z.freeBays > 0 && (
+                        <div className="mb-1.5 text-[11px] font-bold text-primary">Beste keuze nu</div>
                       )}
-                      <div className="text-[18px] font-bold leading-tight">{recommended.z.name}</div>
-                      
+
+                      <div className="text-[19px] font-bold leading-tight text-foreground">
+                        {selected.z.name}
+                      </div>
+
                       <div className="mt-2 flex items-center gap-2 text-[14px] font-semibold">
-                        <span className={cn("h-3 w-3 rounded-full shrink-0", recommended.z.freeBays > 0 ? "bg-success pulse-dot" : "bg-destructive")} />
-                        <span className={recommended.z.freeBays > 0 ? "text-foreground" : "text-destructive"}>
-                          {recommended.z.freeBays > 0 
-                            ? `${recommended.z.freeBays} van ${recommended.z.totalBays} plaatsen vrij` 
-                            : `0 van ${recommended.z.totalBays} plaatsen vrij (Vol)`}
-                        </span>
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-success" />
+                        <span className="text-foreground">{availabilityText(selected.z)}</span>
                       </div>
-                      
-                      {recommended.d !== null && (
-                        <div className="mt-1 flex items-center gap-1 text-[13px] text-muted-foreground font-medium">
-                          <Car className="h-3.5 w-3.5" /> {driveMin(recommended.d)} min · {formatDist(recommended.d)}
+
+                      {selected.d !== null && (
+                        <div className="mt-1 text-[13px] font-medium text-muted-foreground">
+                          {driveMin(selected.d)} min · {formatDist(selected.d)}
                         </div>
                       )}
 
-                      <ZoneIntelligence
-                        spotId={`parko:${recommended.z.id}`}
-                        freeBays={recommended.z.freeBays}
-                        totalBays={recommended.z.totalBays}
-                        compact
-                      />
-
-                      <div className="mt-4 grid grid-cols-[0.85fr_1.35fr] gap-2">
-                        <button
-                          type="button"
-                          onClick={() => navigateTo(recommended.z)}
-                          className="flex min-h-[46px] items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-[13px] font-extrabold text-slate-700 active:scale-[0.98]"
-                        >
-                          <Navigation className="h-4 w-4" /> Route
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => activeSession ? toast.info("Er loopt al een sessie") : setShowStartSheet(true)}
-                          disabled={starting || recommended.z.freeBays === 0}
-                          className="flex min-h-[46px] items-center justify-center gap-2 rounded-2xl bg-primary px-3 text-[14px] font-extrabold text-primary-foreground shadow-glow-mint transition active:scale-[0.98] disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
-                        >
-                          {starting ? <Loader2 className="h-5 w-5 animate-spin" /> : recommended.z.freeBays > 0 ? "Ik sta hier · start 30 min" : "Nu vol"}
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => navigateTo(selected.z)}
+                        className="mt-4 flex min-h-[46px] w-full items-center justify-center rounded-xl bg-primary px-4 text-[15px] font-bold text-primary-foreground transition-transform active:scale-[0.98]"
+                      >
+                        Navigeer →
+                      </button>
                     </div>
 
-                    <div className="mt-auto pt-3 flex justify-center pb-2">
-                      <button 
+                    <div className="mt-auto flex justify-center pb-1 pt-2">
+                      <button
+                        type="button"
                         onClick={() => setSheetState(2)}
-                        className="flex items-center gap-1 text-[12px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
                       >
-                        Nog {Math.max(0, sortedZones.length - 1)} locaties <ChevronDown className="h-3 w-3" />
+                        {otherFreeLocations > 0
+                          ? `Nog ${otherFreeLocations} ${otherFreeLocations === 1 ? "locatie" : "locaties"}`
+                          : "Bekijk alle locaties"}
+                        <ChevronDown className="h-3 w-3" />
                       </button>
                     </div>
                   </>
-                ) : (
-                  <div className="text-center text-sm text-muted-foreground p-4">Geen locaties gevonden</div>
-                )}
+                ) : null}
               </div>
 
-              {/* STATE 2: Fully open - List of all locations */}
-              <div className={cn("transition-opacity duration-200 flex flex-col gap-3", sheetState === 2 ? "opacity-100" : "hidden pointer-events-none")}>
-                {sortedZones.length > 0 && (
-                  <div className="text-[11px] font-medium text-muted-foreground text-center mb-1">
-                    Beschikbaarheid verandert continu. <br/>
-                    Controleer de actuele beschikbaarheid voordat je vertrekt.
-                  </div>
+              <div
+                className={cn(
+                  "flex flex-col gap-2.5 transition-opacity duration-200",
+                  sheetState === 2 ? "opacity-100" : "hidden pointer-events-none",
                 )}
-                {sortedZones.map(({ z, d }, idx) => (
-                  <button
-                    key={`${z.id}-${idx}`}
-                    onClick={() => {
-                      setSelectedZoneId(z.id);
-                      setSheetState(1); // Go back to half open on selection
-                    }}
-                    className={cn(
-                      "card-soft flex w-full flex-row items-center justify-between p-4 text-left transition-base active:scale-[0.99]",
-                      z.id === selectedZoneId && "ring-2 ring-primary/40 shadow-glow-mint"
-                    )}
-                  >
-                    <div className="flex-1 min-w-0 pr-3">
-                      {idx === 0 && z.freeBays > 0 && (
-                         <div className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                           Beste keuze nu
-                         </div>
+              >
+                {sortedZones.map(({ z, d }, idx) => {
+                  const isSelected = z.id === selectedZoneId;
+                  const isBest = idx === 0 && z.freeBays > 0;
+                  return (
+                    <div
+                      key={z.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => selectZone(z)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") selectZone(z);
+                      }}
+                      className={cn(
+                        "card-soft flex w-full items-center gap-3 p-3.5 text-left transition-all active:scale-[0.99]",
+                        isSelected && "ring-1 ring-primary/50",
                       )}
-                      <div className="text-[15px] font-bold truncate">{z.name}</div>
-                      <div className="mt-1.5 flex items-center gap-2 text-[13px] font-semibold">
-                        <span className={cn("h-2.5 w-2.5 rounded-full shrink-0", z.freeBays > 0 ? "bg-success" : "bg-destructive")} />
-                        <span className={z.freeBays > 0 ? "text-foreground" : "text-destructive"}>
-                          {z.freeBays > 0 
-                            ? `${z.freeBays} van ${z.totalBays} plaatsen vrij` 
-                            : `0 van ${z.totalBays} plaatsen vrij (Vol)`}
-                        </span>
-                      </div>
-                      {d !== null && (
-                        <div className="mt-1 flex items-center gap-1 text-[12px] text-muted-foreground font-medium">
-                          <Car className="h-3 w-3" /> {driveMin(d)} min · {formatDist(d)}
+                    >
+                      <div className="min-w-0 flex-1">
+                        {isBest && (
+                          <div className="mb-1 text-[10.5px] font-bold text-primary">Beste keuze nu</div>
+                        )}
+                        <div className="truncate text-[15px] font-bold text-foreground">{z.name}</div>
+                        <div className="mt-1 flex items-center gap-2 text-[12.5px] font-semibold">
+                          <span
+                            className={cn(
+                              "h-2.5 w-2.5 shrink-0 rounded-full",
+                              z.freeBays > 0 ? "bg-success" : "bg-muted-foreground/55",
+                            )}
+                          />
+                          <span className={z.freeBays > 0 ? "text-foreground" : "text-muted-foreground"}>
+                            {availabilityText(z)}
+                          </span>
                         </div>
+                        {d !== null && (
+                          <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">
+                            {driveMin(d)} min · {formatDist(d)}
+                          </div>
+                        )}
+                      </div>
+
+                      {z.freeBays > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigateTo(z);
+                          }}
+                          className="shrink-0 rounded-xl bg-primary px-3 py-2.5 text-[12px] font-bold text-primary-foreground transition-transform active:scale-[0.98]"
+                        >
+                          Navigeer →
+                        </button>
                       )}
                     </div>
-                    {z.freeBays > 0 && (
-                       <div className="flex h-[36px] items-center justify-center gap-1 rounded-xl bg-primary px-3 text-[12px] font-bold text-primary-foreground shrink-0 shadow-glow-mint">
-                         Bekijk <ChevronRight className="h-3 w-3" />
-                       </div>
-                    )}
-                  </button>
-                ))}
-              </div>
+                  );
+                })}
 
+                {sortedZones.length > 0 && (
+                  <div className="px-2 pb-2 pt-1 text-center text-[11px] font-medium text-muted-foreground">
+                    Beschikbaarheid verandert continu. Controleer voor vertrek de actuele status.
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
       </div>
-
-      <StartTimerSheet
-        open={showStartSheet}
-        onClose={() => (starting ? null : setShowStartSheet(false))}
-        onConfirm={confirmStart}
-        starting={starting}
-      />
     </div>
   );
 };
