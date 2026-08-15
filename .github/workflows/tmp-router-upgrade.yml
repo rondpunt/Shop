@@ -1,0 +1,46 @@
+name: One-time React Router security upgrade
+
+on:
+  push:
+    branches: [import-parkv3-clean]
+    paths: [.github/workflows/tmp-router-upgrade.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: import-parkv3-clean
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Upgrade and validate
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --save-exact react-router-dom@7.18.2
+          npm audit --omit=dev --audit-level=moderate
+          npm run lint
+          npm test
+          npx tsc --noEmit
+          npx tsc -p tsconfig.api.json --noEmit
+          npm run build:pwa
+      - name: Publish only after validation
+        run: |
+          git config user.name "shopgo-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add package.json package-lock.json
+          git diff --cached --quiet && exit 0
+          git commit -m "security: upgrade React Router to patched 7.18.2"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin import-parkv3-clean
+            git rebase origin/import-parkv3-clean
+            if git push origin HEAD:import-parkv3-clean; then exit 0; fi
+            sleep 2
+          done
+          exit 1
