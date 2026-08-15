@@ -5,22 +5,16 @@ import { AppHeader } from "./AppHeader";
 import { BottomTabBar } from "./BottomTabBar";
 import { RouteLoader } from "./RouteLoader";
 
-/**
- * Two layout modes:
- *  - "fullscreen" pages (Home, Timer): NO AppHeader and NO max-width container — page renders edge-to-edge.
- *  - default pages: header + container + bottom tabs.
- */
 const FULLSCREEN_ROUTES = ["/", "/timer"];
 
 export const AppLayout = () => {
   useAppUsage();
   const { pathname } = useLocation();
-
-  const fullscreen = FULLSCREEN_ROUTES.includes(pathname);
+  const fullscreen = FULLSCREEN_ROUTES.includes(pathname) || pathname.startsWith("/session/");
 
   if (fullscreen) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
+      <div className="flex min-h-[100dvh] flex-col bg-background">
         <div key={pathname} className="animate-page-in flex-1">
           <Suspense fallback={<RouteLoader />}>
             <Outlet />
@@ -32,9 +26,9 @@ export const AppLayout = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="flex min-h-[100dvh] flex-col bg-background text-foreground">
       <AppHeader />
-      <main key={pathname} className="pb-safe animate-page-in mx-auto max-w-md px-4 pb-32 pt-4 w-full flex-1">
+      <main key={pathname} className="pb-safe animate-page-in mx-auto w-full max-w-md flex-1 px-4 pb-32 pt-4">
         <Suspense fallback={<RouteLoader />}>
           <Outlet />
         </Suspense>
