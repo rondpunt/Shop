@@ -6,6 +6,7 @@ import {
   Sparkles, User as UserIcon, ChevronRight, Lock, Shield, Smartphone,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { PwaInstallCard } from "@/components/PwaInstallCard";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { usePremium } from "@/hooks/usePremium";
@@ -153,6 +154,7 @@ const Settings = () => {
         <ToggleRow icon={Moon} label="Donkere modus" checked={isDarkMode} onToggle={toggleDark} />
         <ToggleRow icon={Smartphone} label="Notificaties" checked={notifications} onToggle={toggleNotifications} />
       </Card>
+      <PwaInstallCard />
 
       {!premium && (
         <Link

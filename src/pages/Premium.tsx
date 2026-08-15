@@ -42,6 +42,7 @@ const Premium = () => {
   const [selectedPlan, setSelectedPlan] = useState<Plan>("yearly");
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
+  const [trialBusy, setTrialBusy] = useState(false);
 
   useEffect(() => {
     MarketingSuite.trackEvent("page_view", { page: "premium" });
@@ -64,14 +65,46 @@ const Premium = () => {
     }
   }, [searchParams, setSearchParams, refresh]);
 
-  const handleStartTrial = () => {
-    startTrial();
-    success();
-    MarketingSuite.trackEvent("premium_trial_started");
-    Logger.marketing("CONVERSION", "User started a 7-day premium free trial");
-    toast.success("🎉 7 dagen Premium gestart", {
-      description: "Geen betaling nu. Na 7 dagen vervalt Premium automatisch.",
-    });
+  const handleStartTrial = async () => {
+    if (!user) {
+      warning();
+      toast.info("Meld je eerst aan om je gratis proefperiode te starten.");
+      navigate(`/auth?redirect=${encodeURIComponent("/premium")}`);
+      return;
+    }
+    setTrialBusy(true);
+    try {
+      await startTrial();
+      success();
+      MarketingSuite.trackEvent("premium_trial_started");
+      Logger.marketing("CONVERSION", "User started a server-side 7-day premium trial");
+      toast.success("🎉 7 dagen Premium gestart", {
+        description: "Geen betaling nu. Na 7 dagen vervalt Premium automatisch.",
+      });
+    } catch (e) {
+      warning();
+      toast.error("Proefperiode kon niet starten", {
+        description: e instanceof Error ? e.message : "Probeer opnieuw.",
+      });
+    } finally {
+      setTrialBusy(false);
+    }
+  };
+
+  const handleCancelTrial = async () => {
+    setTrialBusy(true);
+    try {
+      await cancel();
+      tap();
+      toast.info("Proefperiode gestopt");
+    } catch (e) {
+      warning();
+      toast.error("Proefperiode kon niet worden gestopt", {
+        description: e instanceof Error ? e.message : "Probeer opnieuw.",
+      });
+    } finally {
+      setTrialBusy(false);
+    }
   };
 
   const handleCheckout = async (plan: Plan) => {
@@ -252,7 +285,8 @@ const Premium = () => {
               </button>
               <button
                 type="button"
-                onClick={() => { cancel(); tap(); toast.info("Proefperiode gestopt"); }}
+                onClick={handleCancelTrial}
+                disabled={trialBusy}
                 className="btn-pill-outline w-full"
               >
                 Proefperiode stoppen
@@ -263,9 +297,10 @@ const Premium = () => {
               <button
                 type="button"
                 onClick={handleStartTrial}
+                disabled={trialBusy}
                 className="btn-pill-primary w-full"
               >
-                Start 7 dagen gratis <ArrowRight className="h-5 w-5" />
+                {trialBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : (<>Start 7 dagen gratis <ArrowRight className="h-5 w-5" /></>)}
               </button>
               <button
                 type="button"

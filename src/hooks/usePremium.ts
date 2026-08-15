@@ -38,6 +38,7 @@ export const usePremium = () => {
   const { user } = useAuth();
   const [sub, setSub] = useState<SubRow | null>(null);
   const [trialEndsAt, setTrialEndsAt] = useState<number | null>(null);
+  const [, setClock] = useState(() => Date.now());
   const refreshing = useRef(false);
   const env = hasStripeToken() ? getStripeEnvironment() : "sandbox";
 
@@ -102,9 +103,7 @@ export const usePremium = () => {
   useEffect(() => {
     const onFocus = () => void refresh();
     window.addEventListener("focus", onFocus);
-    const id = window.setInterval(() => {
-      setTrialEndsAt((current) => current && current <= Date.now() ? current : current);
-    }, 60_000);
+    const id = window.setInterval(() => setClock(Date.now()), 60_000);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.clearInterval(id);

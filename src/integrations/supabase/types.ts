@@ -97,6 +97,7 @@ export type Database = {
           email: string | null
           id: string
           provider: string | null
+          trial_ends_at: string | null
           updated_at: string
         }
         Insert: {
@@ -106,6 +107,7 @@ export type Database = {
           email?: string | null
           id: string
           provider?: string | null
+          trial_ends_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -115,6 +117,7 @@ export type Database = {
           email?: string | null
           id?: string
           provider?: string | null
+          trial_ends_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -291,10 +294,18 @@ export type Database = {
       }
     }
     Functions: {
-      increment_discovered_spot_visit: {
-        Args: { _spot_id: string }
-        Returns: undefined
+      cancel_trial: { Args: Record<PropertyKey, never>; Returns: undefined }
+      get_spot_forecast_public: {
+        Args: Record<PropertyKey, never>
+        Returns: { spot_id: string; active_sessions: number; departing_5m: number; departing_10m: number; overdue_sessions: number }[]
       }
+      get_spot_reports_public: {
+        Args: { _spot_id: string; _minutes?: number }
+        Returns: { id: string; spot_id: string; status: string; created_at: string }[]
+      }
+      increment_discovered_spot_visit: { Args: { _spot_id: string }; Returns: undefined }
+      is_premium: { Args: { _user_id: string }; Returns: boolean }
+      start_trial: { Args: Record<PropertyKey, never>; Returns: string }
     }
     Enums: {
       [_ in never]: never
