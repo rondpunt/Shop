@@ -13,8 +13,8 @@ export type DiscoveredSpot = {
 };
 
 /**
- * Crowd-learned parking spots: anyone (anon or signed-in) can read.
- * Auto-refreshes via Postgres realtime when new spots are added or visit counts update.
+ * Public crowd-discovered parking locations via a privacy-safe RPC projection.
+ * Direct table access stays private so creator/user identifiers cannot be enumerated.
  */
 export const useDiscoveredSpots = (limit = 200) => {
   const [spots, setSpots] = useState<DiscoveredSpot[]>([]);
@@ -23,29 +23,25 @@ export const useDiscoveredSpots = (limit = 200) => {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const { data } = await supabase
-        .from("discovered_spots")
-        .select("id, spot_id, lat, lng, address, visit_count, first_seen_at, last_seen_at")
-        .order("visit_count", { ascending: false })
-        .limit(limit);
+      const { data, error } = await (supabase.rpc as any)("get_discovered_spots_public", {
+        _limit: Math.min(Math.max(limit, 1), 500),
+      });
       if (!active) return;
-      setSpots((data as DiscoveredSpot[]) ?? []);
+      if (error) {
+        console.warn("Crowd parking locations are temporarily unavailable");
+        setSpots([]);
+      } else {
+        setSpots((data as DiscoveredSpot[]) ?? []);
+      }
       setLoading(false);
     };
-    load();
 
-    const channel = supabase
-      .channel("discovered_spots_changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "discovered_spots" },
-        () => load()
-      )
-      .subscribe();
+    void load();
+    const refresh = window.setInterval(load, 60_000);
 
     return () => {
       active = false;
-      supabase.removeChannel(channel);
+      window.clearInterval(refresh);
     };
   }, [limit]);
 
