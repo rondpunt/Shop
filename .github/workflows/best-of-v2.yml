@@ -27,8 +27,10 @@ jobs:
       - name: Apply source patches
         run: python3 scripts/apply_best_of_v2.py
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Refresh stale lockfile and install
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --no-audit --no-fund
 
       - name: Typecheck frontend
         run: npx tsc --noEmit
@@ -44,6 +46,7 @@ jobs:
           git config user.name "Shop Best-of Bot"
           git config user.email "actions@users.noreply.github.com"
           git add -- \
+            package-lock.json \
             src/pages/Home.tsx \
             src/pages/LocationDetail.tsx \
             src/lib/localStore.ts \
