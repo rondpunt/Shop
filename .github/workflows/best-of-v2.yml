@@ -1,0 +1,57 @@
+name: Apply best-of v2 polish
+
+on:
+  push:
+    branches: [import-parkv3-clean]
+    paths:
+      - scripts/apply_best_of_v2.py
+      - .github/workflows/best-of-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: import-parkv3-clean
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply source patches
+        run: python3 scripts/apply_best_of_v2.py
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck frontend
+        run: npx tsc --noEmit
+
+      - name: Build installable PWA
+        run: npm run build:pwa
+
+      - name: Commit verified changes and remove one-time tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f scripts/apply_best_of_v2.py .github/workflows/best-of-v2.yml
+          git config user.name "Shop Best-of Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -- \
+            src/pages/Home.tsx \
+            src/pages/LocationDetail.tsx \
+            src/lib/localStore.ts \
+            src/hooks/useDataSource.ts \
+            src/pages/History.tsx \
+            src/pages/Premium.tsx \
+            scripts/apply_best_of_v2.py \
+            .github/workflows/best-of-v2.yml
+          git diff --cached --check
+          git commit -m "feat: merge best parking UX from Lovable and Studio"
+          git push origin HEAD:import-parkv3-clean
