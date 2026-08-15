@@ -1,19 +1,19 @@
-// Crowd-only spot signal: NEVER guess based on time-of-day.
-// A spot is only marked busy/full when real users have actively reported it
-// within the last 30 minutes (= one Shop&Go session). Otherwise we show "free / no recent reports".
-
 export type SpotReport = {
   id: string;
   spot_id: string;
   status: "free" | "busy" | "full";
-  note: string | null;
+  note?: string | null;
   created_at: string;
 };
 
-export type SpotSignalLevel =
-  | "free"          // no recent occupied report → assume available
-  | "likely-busy"   // someone reported busy recently
-  | "likely-full";  // someone reported full recently
+export type ReleasePrediction = {
+  active_count: number;
+  releasing_5m: number;
+  releasing_10m: number;
+  next_release_at: string | null;
+};
+
+export type SpotSignalLevel = "free" | "likely-busy" | "likely-full" | "releasing-soon" | "unknown";
 
 export type SpotSignal = {
   level: SpotSignalLevel;
@@ -21,79 +21,73 @@ export type SpotSignal = {
   detail: string;
   freshness: string;
   recentCount: number;
+  releaseText?: string;
 };
 
-// Reports are only meaningful within one Shop&Go cycle.
 const MAX_AGE_MIN = 30;
+const minutesSince = (iso: string, now = Date.now()) => Math.max(0, (now - new Date(iso).getTime()) / 60_000);
+const formatFreshness = (mins: number) => mins < 1 ? "net nu" : mins < 60 ? `${Math.round(mins)} min geleden` : `${Math.round(mins / 60)} u geleden`;
 
-const minutesSince = (iso: string, now = Date.now()) =>
-  Math.max(0, (now - new Date(iso).getTime()) / 60_000);
+export const buildSignal = (reports: SpotReport[], prediction?: ReleasePrediction | null, now: Date = new Date()): SpotSignal => {
+  const fresh = reports
+    .filter((r) => minutesSince(r.created_at, now.getTime()) <= MAX_AGE_MIN)
+    .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+  const newest = fresh[0];
+  const soon = prediction?.releasing_5m ?? 0;
+  const later = prediction?.releasing_10m ?? 0;
+  const releaseText = soon > 0
+    ? `${soon} ${soon === 1 ? "sessie eindigt" : "sessies eindigen"} binnen 5 min`
+    : later > 0
+      ? `${later} ${later === 1 ? "sessie eindigt" : "sessies eindigen"} binnen 10 min`
+      : undefined;
 
-const formatFreshness = (mins: number) => {
-  if (mins < 1) return "net nu";
-  if (mins < 60) return `${Math.round(mins)} min geleden`;
-  const h = Math.round(mins / 60);
-  return h === 1 ? "1 uur geleden" : `${h} uur geleden`;
-};
+  if (newest?.status === "free") return {
+    level: "free",
+    label: "Net vrij gemeld",
+    detail: "Een bestuurder meldde recent dat hier plaats vrijkwam. Controleer altijd ter plaatse.",
+    freshness: formatFreshness(minutesSince(newest.created_at, now.getTime())),
+    recentCount: fresh.length,
+    releaseText,
+  };
 
-export const buildSignal = (
-  reports: SpotReport[],
-  now: Date = new Date()
-): SpotSignal => {
-  const fresh = reports.filter(
-    (r) => minutesSince(r.created_at, now.getTime()) <= MAX_AGE_MIN
-  );
+  if (releaseText) return {
+    level: "releasing-soon",
+    label: "Mogelijk binnenkort vrij",
+    detail: "Gebaseerd op anonieme actieve 30-minutensessies. Dit is een kanssignaal, geen reservatie of garantie.",
+    freshness: newest ? formatFreshness(minutesSince(newest.created_at, now.getTime())) : "",
+    recentCount: fresh.length,
+    releaseText,
+  };
 
-  // Look only at the most recent report per status — the freshest signal wins.
-  const occupied = fresh.filter((r) => r.status === "busy" || r.status === "full");
+  if (newest?.status === "full") return {
+    level: "likely-full",
+    label: "Recent als vol gemeld",
+    detail: "Recente communitymelding. De situatie kan intussen gewijzigd zijn.",
+    freshness: formatFreshness(minutesSince(newest.created_at, now.getTime())),
+    recentCount: fresh.length,
+  };
 
-  if (occupied.length === 0) {
-    return {
-      level: "free",
-      label: "Vermoedelijk vrij",
-      detail:
-        "Geen recente meldingen van bezetting. Ter plekke checken blijft nodig.",
-      freshness: "",
-      recentCount: 0,
-    };
-  }
-
-  // Newest occupied report drives the level.
-  const newest = occupied.reduce((m, r) =>
-    new Date(r.created_at) > new Date(m.created_at) ? r : m
-  );
-  const level: SpotSignalLevel = newest.status === "full" ? "likely-full" : "likely-busy";
-  const freshness = formatFreshness(minutesSince(newest.created_at, now.getTime()));
+  if (newest?.status === "busy") return {
+    level: "likely-busy",
+    label: "Recent als druk gemeld",
+    detail: "Recente communitymelding. Combineer dit met de officiële live Shop&Go-data.",
+    freshness: formatFreshness(minutesSince(newest.created_at, now.getTime())),
+    recentCount: fresh.length,
+  };
 
   return {
-    level,
-    label: level === "likely-full" ? "Recent gemeld als vol" : "Recent gemeld als bezet",
-    detail: `${occupied.length} ${occupied.length === 1 ? "melding" : "meldingen"} in laatste ${MAX_AGE_MIN} min.`,
-    freshness,
-    recentCount: occupied.length,
+    level: "unknown",
+    label: "Geen recente communitymeldingen",
+    detail: "De officiële live beschikbaarheid blijft de hoofdbron.",
+    freshness: "",
+    recentCount: 0,
   };
 };
 
-export const SIGNAL_THEME: Record<
-  SpotSignalLevel,
-  { ring: string; dot: string; text: string; bg: string }
-> = {
-  free: {
-    ring: "ring-success/40",
-    dot: "bg-success",
-    text: "text-success",
-    bg: "bg-success/10",
-  },
-  "likely-busy": {
-    ring: "ring-warning/40",
-    dot: "bg-warning",
-    text: "text-warning",
-    bg: "bg-warning/10",
-  },
-  "likely-full": {
-    ring: "ring-destructive/40",
-    dot: "bg-destructive",
-    text: "text-destructive",
-    bg: "bg-destructive/10",
-  },
+export const SIGNAL_THEME: Record<SpotSignalLevel, { ring: string; dot: string; text: string; bg: string }> = {
+  free: { ring: "ring-success/35", dot: "bg-success", text: "text-success", bg: "bg-success/10" },
+  "releasing-soon": { ring: "ring-primary/35", dot: "bg-primary", text: "text-primary", bg: "bg-primary/10" },
+  "likely-busy": { ring: "ring-warning/35", dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
+  "likely-full": { ring: "ring-destructive/35", dot: "bg-destructive", text: "text-destructive", bg: "bg-destructive/10" },
+  unknown: { ring: "ring-border", dot: "bg-muted-foreground", text: "text-muted-foreground", bg: "bg-muted/40" },
 };
