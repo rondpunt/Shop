@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import { fail, readJsonBody, requireUser } from "../_shared";
 
 const spots = [
   ["grote-markt", "Grote Markt"], ["leiestraat", "Leiestraat"], ["korte-steenstraat", "Korte Steenstraat"],
@@ -9,19 +10,26 @@ const spots = [
   ["sint-amandsplein", "Sint-Amandsplein"],
 ].map(([id, name]) => ({ id, name }));
 
+const cleanText = (value: unknown, max = 1200) => String(value ?? "").trim().slice(0, max);
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return res.status(503).json({ error: "GEMINI_API_KEY is niet ingesteld" });
   try {
+    await requireUser(req);
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) throw Object.assign(new Error("AI is tijdelijk niet beschikbaar"), { statusCode: 503 });
+
+    const body = await readJsonBody(req);
+    const mode = body?.mode === "parse" ? "parse" : "chat";
+    const text = cleanText(body?.text);
+    if (!text) return res.status(400).json({ error: "Vraag ontbreekt" });
+
     const ai = new GoogleGenAI({ apiKey: key });
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
-    const { mode = "chat", text = "", history = [] } = body;
 
     if (mode === "parse") {
       const response = await ai.models.generateContent({
         model: process.env.GEMINI_MODEL || "gemini-3.5-flash",
-        contents: `Gebruiker: ${String(text)}`,
+        contents: `Gebruiker: ${text}`,
         config: {
           systemInstruction: `Je bent de parkeerparser voor Shop&Go Kortrijk. Match alleen tegen deze locaties: ${JSON.stringify(spots)}. Geef nooit verzonnen realtime beschikbaarheid. Extract straat, zone-id, auto-omschrijving en nummerplaat indien genoemd. Antwoord in helder Belgisch Nederlands.`,
           responseMimeType: "application/json",
@@ -38,13 +46,17 @@ export default async function handler(req: any, res: any) {
           },
         },
       });
+      res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ success: true, data: JSON.parse(response.text || "{}") });
     }
 
-    const contents = Array.isArray(history)
-      ? history.slice(-12).map((h: any) => ({ role: h.role === "assistant" ? "model" : "user", parts: [{ text: String(h.content || "") }] }))
-      : [];
-    contents.push({ role: "user", parts: [{ text: String(text) }] });
+    const history = Array.isArray(body?.history) ? body.history.slice(-10) : [];
+    const contents = history.map((h: any) => ({
+      role: h?.role === "assistant" ? "model" : "user",
+      parts: [{ text: cleanText(h?.content, 900) }],
+    })).filter((item: any) => item.parts[0].text.length > 0);
+    contents.push({ role: "user", parts: [{ text }] });
+
     const response = await ai.models.generateContent({
       model: process.env.GEMINI_MODEL || "gemini-3.5-flash",
       contents,
@@ -52,9 +64,9 @@ export default async function handler(req: any, res: any) {
         systemInstruction: `Je bent de beknopte AI-parkeerassistent van Shop&Go Kortrijk. Antwoord in Belgisch Nederlands. Leg uit dat Shop&Go maximaal 30 minuten gratis is tijdens de geldende uren en dat officiële borden/regels ter plaatse altijd voorrang hebben. Gebruik nooit verzonnen live parkeerdata; de app toont officiële Parko-sensordata apart. Houd antwoorden mobiel en praktisch.`,
       },
     });
+    res.setHeader("Cache-Control", "no-store");
     return res.status(200).json({ success: true, text: response.text || "" });
-  } catch (error: any) {
-    console.error("Gemini function failed", error);
-    return res.status(500).json({ success: false, error: error?.message || "AI tijdelijk niet beschikbaar" });
+  } catch (error) {
+    return fail(res, error);
   }
 }
