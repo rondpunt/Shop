@@ -1,0 +1,21 @@
+/* Reset — geen Vite default container. De app beheert zijn eigen layout. */
+#root {
+  width: 100%;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  /* Globale schaal — voorkomt "ingezoomd" gevoel op high-dpr mobiel.
+     Werkt op WebKit/Chromium (de runtimes die we targetten via Capacitor / mobiele browsers). */
+  zoom: 0.88;
+}
+
+/* Firefox kent geen `zoom` — gebruik transform fallback. */
+@supports not (zoom: 1) {
+  #root {
+    transform: scale(0.88);
+    transform-origin: top left;
+    width: 113.636%;
+    min-height: 113.636dvh;
+  }
+}

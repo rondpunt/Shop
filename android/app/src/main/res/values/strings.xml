@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Shop&amp;Go Kortrijk</string>
+    <string name="title_activity_main">Shop&amp;Go Kortrijk</string>
+    <string name="package_name">be.shopgo.kortrijk</string>
+    <string name="custom_url_scheme">be.shopgo.kortrijk</string>
+</resources>

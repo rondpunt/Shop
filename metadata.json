@@ -1,0 +1,10 @@
+{
+  "name": "Shop & Go Kortrijk",
+  "description": "Persoonlijke reminder voor de 30 minuten gratis Shop&Go parkeervakken in Kortrijk. Timer, locatie en waarschuwingen.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

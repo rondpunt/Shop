@@ -1,0 +1,406 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   SHOP&GO KORTRIJK — Design System v2
+   Inspired by 4411 × Google Maps. Mint accent #00C896.
+   ============================================================ */
+
+@layer base {
+  :root {
+    /* ---------- Surfaces — donker premium (zoals screenshots) ---------- */
+    --background: 232 29% 10%;          /* deep premium navy */
+    --foreground: 0 0% 98%;             /* witte tekst op donkere bg */
+    --foreground-deep: 225 35% 7%;      /* bijna zwart voor header/nav */
+
+    --card: 0 0% 100%;                  /* witte kaarten bovenop donker */
+    --card-foreground: 230 28% 12%;
+    --card-muted: 225 9% 66%;
+    --card-soft-bg: 165 78% 94%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 230 28% 14%;
+
+    /* ---------- Primary (mint #00C896) ---------- */
+    --primary: 165 100% 41%;            /* luminous mint */
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 165 100% 57%;
+    --primary-deep: 230 28% 14%;        /* dark navy header */
+
+    /* ---------- Accent (rare) ---------- */
+    --accent: 165 100% 39%;
+    --accent-foreground: 0 0% 100%;
+
+    --secondary: 230 22% 18%;           /* donkere subtiele bg op navy */
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 230 20% 20%;                /* donkere "muted" surface */
+    --muted-foreground: 220 12% 70%;     /* lichtgrijze tekst op navy */
+
+    /* ---------- Status ---------- */
+    --success: 165 100% 39%;            /* same as primary */
+    --success-foreground: 0 0% 100%;
+    --warning: 32 100% 50%;             /* #FFA500 */
+    --warning-foreground: 0 0% 100%;
+    --destructive: 354 100% 64%;        /* #FF4757 */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 230 20% 22%;               /* zichtbare border op navy */
+    --input: 230 20% 22%;
+    --ring: 165 100% 39%;
+
+    --radius: 1rem;
+
+    /* ---------- Premium status (gold) ---------- */
+    --gold: 38 92% 50%;
+
+    /* ---------- Shadows ---------- */
+    --shadow-soft:
+      0 1px 2px hsl(230 30% 14% / 0.04),
+      0 4px 12px -4px hsl(230 30% 14% / 0.08);
+    --shadow-card:
+      0 2px 12px hsl(230 30% 14% / 0.08);
+    --shadow-elevated:
+      0 8px 28px -6px hsl(230 30% 14% / 0.18);
+    --shadow-glow-mint:
+      0 6px 20px -4px hsl(var(--primary) / 0.45);
+    --shadow-glow-neon:
+      0 0 0 1px hsl(var(--primary) / 0.35),
+      0 0 12px hsl(var(--primary) / 0.55),
+      0 0 28px hsl(var(--primary) / 0.45),
+      inset 0 1px 0 hsl(0 0% 100% / 0.35);
+    --shadow-sheet:
+      0 -8px 32px -8px hsl(230 30% 14% / 0.16);
+
+    /* ---------- Glassmorphism tokens ---------- */
+    --glass-bg-dark: 0 0% 100% / 0.06;
+    --glass-bg-light: 0 0% 100% / 0.65;
+    --glass-border: 0 0% 100% / 0.10;
+    --glass-border-strong: 0 0% 100% / 0.18;
+    --glass-blur: 20px;
+    --glass-saturate: 180%;
+    --shadow-glass:
+      0 1px 0 hsl(0 0% 100% / 0.08) inset,
+      0 20px 40px -20px hsl(230 60% 4% / 0.55),
+      0 8px 24px -12px hsl(230 60% 4% / 0.35);
+    --shadow-glass-float:
+      0 1px 0 hsl(0 0% 100% / 0.10) inset,
+      0 30px 60px -20px hsl(230 60% 4% / 0.65),
+      0 12px 32px -12px hsl(230 60% 4% / 0.45);
+
+    --transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* sidebar (unused but kept for shadcn) */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 230 28% 14%;
+    --sidebar-primary: 165 100% 39%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 16% 94%;
+    --sidebar-accent-foreground: 230 28% 14%;
+    --sidebar-border: 220 16% 90%;
+    --sidebar-ring: 165 100% 39%;
+  }
+
+  .dark {
+    --background: 230 28% 8%;
+    --foreground: 0 0% 96%;
+    --card: 230 24% 12%;
+    --card-foreground: 0 0% 96%;
+    --popover: 230 24% 12%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 165 100% 45%;
+    --primary-foreground: 230 28% 8%;
+    --primary-glow: 165 90% 55%;
+    --primary-deep: 230 28% 5%;
+    --accent: 165 100% 45%;
+    --accent-foreground: 0 0% 100%;
+    --secondary: 230 18% 18%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 230 18% 16%;
+    --muted-foreground: 220 9% 65%;
+    --warning: 32 100% 55%;
+    --warning-foreground: 0 0% 8%;
+    --destructive: 354 100% 64%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 165 100% 45%;
+    --border: 230 18% 22%;
+    --input: 230 18% 22%;
+    --ring: 165 100% 45%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; scrollbar-width: none; -ms-overflow-style: none; }
+  *::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+  html, body {
+    /* Native-app gevoel: geen pull-to-refresh, geen overscroll bounce, geen pinch-zoom. */
+    overscroll-behavior: none;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    overscroll-behavior-y: none;
+    min-height: 100dvh;
+  }
+
+  /* Inputs en bewerkbare velden moeten wél tekst-selectie toestaan. */
+  input, textarea, [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Knoppen en links nooit highlight bij tap. */
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  
+  .font-display {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum", "ss01";
+    letter-spacing: 0;
+    font-weight: 800;
+  }
+
+  .micro-label {
+    font-family: 'Inter', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+    font-size: 11px;
+  }
+}
+
+@layer components {
+  /* Pill button — full primary */
+  .btn-pill {
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-bold transition-base;
+    min-height: 52px;
+    padding-inline: 1.5rem;
+    font-size: 15px;
+  }
+  .btn-pill-primary {
+    @apply btn-pill bg-primary text-primary-foreground shadow-glow-mint hover:brightness-105 active:scale-[0.98];
+  }
+  .btn-pill-outline {
+    @apply btn-pill border-2 border-primary bg-transparent text-primary hover:bg-primary/5 active:scale-[0.98];
+  }
+  .btn-pill-dark {
+    @apply btn-pill bg-deep text-white hover:brightness-110 active:scale-[0.98];
+  }
+
+  /* Card — rounded white, shadow */
+  .card-soft {
+    @apply rounded-3xl bg-card text-card-foreground shadow-card;
+  }
+
+  /* Status pill */
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold;
+  }
+  .pill-free   { @apply bg-success/15 text-success; }
+  .pill-full   { @apply bg-destructive/15 text-destructive; }
+  .pill-warn   { @apply bg-warning/15 text-warning; }
+  .pill-gray   { @apply bg-muted text-muted-foreground; }
+
+  /* Search bar (pill input) */
+  .search-pill {
+    @apply flex h-12 w-full items-center gap-2.5 rounded-full bg-card px-5 text-sm shadow-card ring-1 ring-border/60;
+  }
+
+  .app-page-panel {
+    @apply -mx-4 min-h-[calc(100dvh-9rem)] px-4 pb-8 pt-6;
+    background: linear-gradient(180deg, hsl(var(--background)) 0%, hsl(233 29% 12%) 100%);
+  }
+}
+
+@layer utilities {
+  .bg-primary-deep   { background-color: hsl(var(--primary-deep)); }
+  .text-primary-deep { color: hsl(var(--primary-deep)); }
+  .bg-deep           { background-color: hsl(var(--foreground-deep)); }
+  .text-deep         { color: hsl(var(--foreground-deep)); }
+  .bg-gold           { background-color: hsl(var(--gold)); }
+  .text-gold         { color: hsl(var(--gold)); }
+
+  .shadow-soft       { box-shadow: var(--shadow-soft); }
+  .shadow-card       { box-shadow: var(--shadow-card); }
+  .shadow-elevated   { box-shadow: var(--shadow-elevated); }
+  .shadow-glow-mint  { box-shadow: var(--shadow-glow-mint); }
+  .shadow-glow-neon  { box-shadow: var(--shadow-glow-neon); }
+  .shadow-sheet      { box-shadow: var(--shadow-sheet); }
+
+  .card-soft .text-foreground,
+  .bg-card .text-foreground,
+  .card-soft h1,
+  .card-soft h2,
+  .card-soft h3,
+  .bg-card h1,
+  .bg-card h2,
+  .bg-card h3 {
+    color: hsl(var(--card-foreground));
+  }
+
+  .card-soft .text-muted-foreground,
+  .bg-card .text-muted-foreground {
+    color: hsl(var(--card-muted));
+  }
+
+  .card-soft .bg-muted,
+  .bg-card .bg-muted {
+    background-color: hsl(225 30% 95%);
+  }
+
+  .mint-icon-tile {
+    background: linear-gradient(180deg, hsl(var(--card-soft-bg)) 0%, hsl(165 85% 91%) 100%);
+    color: hsl(var(--primary));
+  }
+
+  /* Neon mint progress bar — bright, glowing, like the screenshots */
+  .bar-neon {
+    background: linear-gradient(180deg,
+      hsl(var(--primary-glow)) 0%,
+      hsl(var(--primary)) 55%,
+      hsl(165 100% 32%) 100%);
+    box-shadow:
+      0 0 10px hsl(var(--primary) / 0.65),
+      0 0 24px hsl(var(--primary) / 0.45),
+      inset 0 1px 0 hsl(0 0% 100% / 0.4),
+      inset 0 -2px 6px hsl(165 100% 22% / 0.5);
+  }
+  .dot-neon {
+    background: radial-gradient(circle at 35% 30%,
+      hsl(165 100% 70%) 0%,
+      hsl(var(--primary)) 55%,
+      hsl(165 100% 28%) 100%);
+    box-shadow:
+      0 0 10px hsl(var(--primary) / 0.85),
+      0 0 22px hsl(var(--primary) / 0.55);
+  }
+
+  .transition-base { transition: var(--transition-base); }
+
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+  /* Live pulse dot */
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 0 hsl(var(--success) / 0.6); }
+    50%      { box-shadow: 0 0 0 6px hsl(var(--success) / 0); }
+  }
+  .pulse-dot { animation: pulse-dot 1.6s ease-out infinite; }
+
+  @keyframes pulse-danger {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
+  }
+  .animate-pulse-danger { animation: pulse-danger 1s ease-in-out infinite; }
+
+  @keyframes slide-up-sheet {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  .animate-sheet-in { animation: slide-up-sheet 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+  /* Page-transitie — fade + subtle slide voor route changes (native gevoel). */
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate-page-in {
+    animation: page-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pulse-dot, .animate-pulse-danger, .animate-sheet-in, .animate-page-in,
+    .animate-breathe, .animate-glass-in { animation: none; }
+  }
+
+  /* ============ Glassmorphism ============ */
+  .glass {
+    background-color: hsl(var(--glass-bg-dark));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid hsl(var(--glass-border));
+    box-shadow: var(--shadow-glass);
+  }
+  .glass-light {
+    background-color: hsl(var(--glass-bg-light));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid hsl(0 0% 100% / 0.5);
+    box-shadow: var(--shadow-glass);
+  }
+  .glass-card {
+    @apply glass rounded-[20px];
+  }
+  .glass-sheet {
+    @apply glass rounded-t-[24px];
+  }
+  .glass-float {
+    background-color: hsl(var(--glass-bg-dark));
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    border: 1px solid hsl(var(--glass-border-strong));
+    box-shadow: var(--shadow-glass-float);
+  }
+  .shadow-glass       { box-shadow: var(--shadow-glass); }
+  .shadow-glass-float { box-shadow: var(--shadow-glass-float); }
+
+  /* Ambient gradient backdrop achter glazen panelen — anders is glas onzichtbaar. */
+  .ambient-backdrop {
+    position: relative;
+    isolation: isolate;
+  }
+  .ambient-backdrop::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(60% 40% at 15% 10%, hsl(230 80% 40% / 0.35), transparent 70%),
+      radial-gradient(50% 40% at 85% 20%, hsl(270 70% 45% / 0.28), transparent 70%),
+      radial-gradient(70% 60% at 50% 100%, hsl(200 80% 30% / 0.25), transparent 70%),
+      linear-gradient(180deg, hsl(230 40% 8%) 0%, hsl(232 45% 5%) 100%);
+    pointer-events: none;
+  }
+  .ambient-status-ok::before    { filter: hue-rotate(0deg); }
+  .ambient-status-warn::before  { filter: hue-rotate(-40deg) saturate(1.1); }
+  .ambient-status-danger::before{ filter: hue-rotate(-90deg) saturate(1.2); }
+
+  /* Rustige "ademende" pulse voor de actieve-sessiekaart bij <10 min. */
+  @keyframes breathe {
+    0%, 100% { box-shadow: var(--shadow-glass-float), 0 0 0 0 hsl(var(--warning) / 0.0); }
+    50%      { box-shadow: var(--shadow-glass-float), 0 0 40px 6px hsl(var(--warning) / 0.18); }
+  }
+  .animate-breathe { animation: breathe 3.6s ease-in-out infinite; }
+  @keyframes breathe-danger {
+    0%, 100% { box-shadow: var(--shadow-glass-float), 0 0 0 0 hsl(var(--destructive) / 0.0); }
+    50%      { box-shadow: var(--shadow-glass-float), 0 0 48px 8px hsl(var(--destructive) / 0.28); }
+  }
+  .animate-breathe-danger { animation: breathe-danger 2.4s ease-in-out infinite; }
+
+  @keyframes glass-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .animate-glass-in { animation: glass-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+}
