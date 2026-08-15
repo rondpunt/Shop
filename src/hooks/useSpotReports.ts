@@ -40,7 +40,7 @@ export const useSpotReports = (spotId: string | null) => {
   });
 
   const reports = useMemo(() => query.data ?? [], [query.data]);
-  const signal: SpotSignal = useMemo(() => buildSignal(reports, now), [reports, now]);
+  const signal: SpotSignal = useMemo(() => buildSignal(reports, null, now), [reports, now]);
 
   const submit = useMutation({
     mutationFn: async (input: { status: SpotReport["status"]; note?: string }) => {
