@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
+import { supabase } from "@/integrations/supabase/client";
 import { useDataSource } from "@/hooks/useDataSource";
 import { useReminderPref } from "@/hooks/useReminderPref";
 import { ensureNotificationPermission, scheduleSessionAlarms } from "@/lib/notifications";
@@ -32,6 +33,17 @@ type ParsedParkingResult = {
   matchedCarDescription: string | null;
   matchedPlate: string | null;
   explanation: string;
+};
+
+const getAiHeaders = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Meld je eerst aan om de AI-parkeerassistent te gebruiken.");
+  }
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session.access_token}`,
+  };
 };
 
 const CHAT_PRESETS = [
@@ -79,7 +91,7 @@ export default function AiAssistant() {
     try {
       const response = await fetch("/api/gemini/assistant", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await getAiHeaders(),
         body: JSON.stringify({ mode: "parse", text: smartInput })
       });
 
@@ -183,7 +195,7 @@ export default function AiAssistant() {
 
       const response = await fetch("/api/gemini/assistant", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await getAiHeaders(),
         body: JSON.stringify({ mode: "chat", text: question, history })
       });
 
@@ -204,7 +216,7 @@ export default function AiAssistant() {
         { 
           id: `err_${Date.now()}`, 
           sender: "bot", 
-          text: `Sorry, ik kon je vraag momenteel niet beantwoorden: ${error.message}. Is je Gemini API-sleutel ingesteld in de Secrets panel?` 
+          text: `Sorry, ik kon je vraag momenteel niet beantwoorden: ${error.message}` 
         }
       ]);
     } finally {
