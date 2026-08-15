@@ -1,10 +1,11 @@
-import { fail, getStripeServer, readJsonBody, requireUser, supabaseAdmin } from "./_shared";
+import { fail, getAdminClient, getStripeServer, readJsonBody, requireUser } from "./_shared";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
     const user = await requireUser(req);
     const { environment = "live" } = await readJsonBody(req);
+    const env = environment === "sandbox" ? "sandbox" : "live";
     if (!user.email) return res.status(200).json({ status: "none" });
 
     const stripe = getStripeServer();
@@ -23,12 +24,15 @@ export default async function handler(req: any, res: any) {
 
     const row = {
       user_id: user.id,
-      environment: String(environment),
+      environment: env,
       stripe_customer_id: customer.id,
       stripe_subscription_id: sub.id,
       status: sub.status,
       price_id: sub.items.data[0]?.price?.id ?? null,
-      product_id: typeof sub.items.data[0]?.price?.product === "string" ? sub.items.data[0].price.product : null,
+      product_id:
+        typeof sub.items.data[0]?.price?.product === "string"
+          ? sub.items.data[0].price.product
+          : null,
       current_period_end: sub.items.data[0]?.current_period_end
         ? new Date(sub.items.data[0].current_period_end * 1000).toISOString()
         : null,
@@ -36,11 +40,12 @@ export default async function handler(req: any, res: any) {
       updated_at: new Date().toISOString(),
     };
 
+    const supabaseAdmin = getAdminClient();
     const { data: existing } = await supabaseAdmin
       .from("subscriptions")
       .select("id")
       .eq("user_id", user.id)
-      .eq("environment", String(environment))
+      .eq("environment", env)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
