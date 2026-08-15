@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 
 export type StripeEnv = "sandbox" | "live";
@@ -7,11 +8,16 @@ const environment: StripeEnv = clientToken?.startsWith("pk_test_") ? "sandbox" :
 
 let stripePromise: Promise<Stripe | null> | null = null;
 
+export function isNativeStoreBuild(): boolean {
+  return Capacitor.isNativePlatform();
+}
+
 export function getStripe(): Promise<Stripe | null> {
+  if (isNativeStoreBuild()) {
+    throw new Error("Webbetalingen zijn niet beschikbaar in de Android Store-versie.");
+  }
   if (!stripePromise) {
-    if (!clientToken) {
-      throw new Error("VITE_PAYMENTS_CLIENT_TOKEN is not set");
-    }
+    if (!clientToken) throw new Error("VITE_PAYMENTS_CLIENT_TOKEN is not set");
     stripePromise = loadStripe(clientToken);
   }
   return stripePromise;
@@ -22,5 +28,5 @@ export function getStripeEnvironment(): StripeEnv {
 }
 
 export function hasStripeToken(): boolean {
-  return !!clientToken;
+  return !isNativeStoreBuild() && !!clientToken;
 }
