@@ -1,0 +1,49 @@
+name: One-time Gradle wrapper repair
+
+on:
+  push:
+    branches: [import-parkv3-clean]
+    paths: [.github/workflows/tmp-gradle-wrapper-repair.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: import-parkv3-clean
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Generate a clean Gradle 8.14.3 wrapper
+        run: |
+          set -euo pipefail
+          curl -fsSLo /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.14.3-bin.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          mkdir -p /tmp/wrapper-project
+          printf "rootProject.name='wrapper-repair'\n" > /tmp/wrapper-project/settings.gradle
+          cd /tmp/wrapper-project
+          /tmp/gradle-8.14.3/bin/gradle wrapper --gradle-version 8.14.3 --distribution-type bin
+          cd "$GITHUB_WORKSPACE"
+          cp /tmp/wrapper-project/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar
+          chmod +x android/gradlew
+          jar tf android/gradle/wrapper/gradle-wrapper.jar >/dev/null
+      - name: Commit repaired binary wrapper
+        run: |
+          git config user.name "shopgo-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add android/gradle/wrapper/gradle-wrapper.jar android/gradlew
+          git diff --cached --quiet && exit 0
+          git commit -m "android: repair corrupted Gradle wrapper"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin import-parkv3-clean
+            git rebase origin/import-parkv3-clean
+            if git push origin HEAD:import-parkv3-clean; then exit 0; fi
+            sleep 2
+          done
+          exit 1
