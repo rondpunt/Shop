@@ -42,10 +42,49 @@
   background: radial-gradient(circle, rgba(0,200,150,.22), rgba(0,200,150,0) 68%);
 }
 
+/* Motion is short and directional: it helps orientation without distracting a driver. */
+@keyframes shopgo-page-enter {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes shopgo-status-in {
+  0% { opacity: .35; transform: scale(.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.app-page-panel {
+  animation: shopgo-page-enter 240ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.card-soft,
+.btn-pill-primary,
+.btn-pill-outline {
+  transition-property: transform, box-shadow, border-color, background-color, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(.2,.8,.2,1);
+}
+
+.card-soft:active,
+.btn-pill-primary:active,
+.btn-pill-outline:active {
+  transform: scale(.985);
+}
+
+.motion-status-in {
+  animation: shopgo-status-in 220ms ease-out both;
+}
+
 @media (display-mode: standalone) {
   .pwa-browser-only { display: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
   .pulse-dot, .animate-pulse-danger { animation: none !important; }
 }
