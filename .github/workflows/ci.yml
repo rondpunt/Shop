@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,9 +20,53 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
       - name: Typecheck app
         run: npx tsc --noEmit
       - name: Typecheck Vercel API
         run: npx tsc -p tsconfig.api.json --noEmit
       - name: Build installable PWA
         run: npm run build:pwa
+
+  android:
+    runs-on: ubuntu-latest
+    needs: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install web dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build web assets
+        run: npm run build:pwa
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+      - name: Build Google Play AAB
+        working-directory: android
+        run: ./gradlew :app:bundlePlayRelease --stacktrace
+      - name: Build Galaxy Store APK
+        working-directory: android
+        run: ./gradlew :app:assembleGalaxyRelease --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shopgo-android-beta
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            android/app/build/outputs/bundle/playRelease/*.aab
+            android/app/build/outputs/apk/galaxy/release/*.apk
