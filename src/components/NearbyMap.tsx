@@ -11,20 +11,22 @@ type Props = {
   userCoords: { lat: number; lng: number } | null;
   zones: ParkoZone[];
   recommendedZoneId?: string | null;
-  /** Tap a marker → navigate to detail */
+  /** Tap a marker → select it in the parent UI. */
   onZoneTap?: (zone: ParkoZone) => void;
-  /** Auto height fills container when omitted */
+  /** Auto height fills container when omitted. */
   height?: number | string;
-  /** Show built-in filter chips (default true) */
+  /** Show built-in filter chips (default true). */
   showFilters?: boolean;
-  /** Initial filter state */
+  /** Initial filter state. */
   initialFilter?: Filter;
+  /** Extra lower map padding reserved for the visible bottom sheet. */
+  bottomPadding?: number;
   className?: string;
 };
 
 const KORTRIJK_CENTER = { lat: 50.8267, lng: 3.2647 };
 
-/* Night-mode map style — donkerblauwe straten, zwarte achtergrond, witte labels. */
+/* Existing Shop&Go night-mode map style. */
 const NIGHT_STYLE: google.maps.MapTypeStyle[] = [
   { elementType: "geometry", stylers: [{ color: "#0f1626" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#0f1626" }] },
@@ -62,13 +64,13 @@ const colorFor = (s: ReturnType<typeof statusFor>) => {
   return "#6B7280";
 };
 
-/** Build SVG data-URL for the green/orange/red drop pin with number inside. */
-const buildPinIcon = (z: ParkoZone, isTop: boolean) => {
+/** Existing pin shape, selected state only ~12.5% larger. */
+const buildPinIcon = (z: ParkoZone, selected: boolean) => {
   const s = statusFor(z);
   const color = colorFor(s);
-  const label = s === "full" ? "VOL" : s === "unknown" ? "?" : String(z.freeBays);
-  const size = isTop ? 60 : 48;
-  const fontSize = label === "VOL" ? 14 : (z.freeBays >= 100 ? 14 : z.freeBays >= 10 ? 18 : 20);
+  const label = s === "full" ? "0" : s === "unknown" ? "?" : String(z.freeBays);
+  const size = selected ? 54 : 48;
+  const fontSize = z.freeBays >= 100 ? 14 : z.freeBays >= 10 ? 18 : 20;
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${Math.round(size * 1.25)}" viewBox="0 0 48 60">
     <path d="M24 2C12.4 2 3 11.4 3 23c0 11.5 14.6 27.5 19.4 32.6a2.2 2.2 0 0 0 3.2 0C30.4 50.5 45 34.5 45 23 45 11.4 35.6 2 24 2Z"
@@ -93,6 +95,7 @@ export const NearbyMap = ({
   height = 240,
   showFilters = true,
   initialFilter = "free",
+  bottomPadding = 220,
   className,
 }: Props) => {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -103,7 +106,6 @@ export const NearbyMap = ({
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>(initialFilter);
 
-  // Init map
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -111,9 +113,6 @@ export const NearbyMap = ({
         const google = await loadGoogleMaps();
         if (cancelled || !mapRef.current) return;
         const center = userCoords ?? KORTRIJK_CENTER;
-        // NOTE: do NOT pass `mapId` together with `styles` — Google Maps logs a
-        // warning and ignores `styles`. We use legacy markers (no AdvancedMarkerElement
-        // requirement) so we can keep the dark night-mode `styles` array.
         mapInstance.current = new google.maps.Map(mapRef.current, {
           center,
           zoom: 16,
@@ -137,7 +136,6 @@ export const NearbyMap = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // User marker — recenter when coords change
   useEffect(() => {
     const map = mapInstance.current;
     if (!map || !userCoords) return;
@@ -156,10 +154,8 @@ export const NearbyMap = ({
       },
       zIndex: 9999,
     });
-    map.panTo(userCoords);
-  }, [userCoords]);
+  }, [userCoords, loading]);
 
-  // Zone markers — re-render on filter / data change
   useEffect(() => {
     const map = mapInstance.current;
     if (!map) return;
@@ -169,20 +165,48 @@ export const NearbyMap = ({
     const visible = zones.filter((z) => (filter === "free" ? z.freeBays > 0 : true));
 
     for (const z of visible) {
-      const isTop = z.id === recommendedZoneId;
+      const selected = z.id === recommendedZoneId;
       const marker = new google.maps.Marker({
         map,
         position: { lat: z.lat, lng: z.lng },
-        icon: buildPinIcon(z, isTop),
+        icon: buildPinIcon(z, selected),
         title: z.name,
-        zIndex: isTop ? 1000 : 100,
+        zIndex: selected ? 1000 : 100,
       });
-      if (onZoneTap) {
-        marker.addListener("click", () => onZoneTap(z));
-      }
+      if (onZoneTap) marker.addListener("click", () => onZoneTap(z));
       markersRef.current.push(marker);
     }
-  }, [zones, filter, recommendedZoneId, onZoneTap]);
+  }, [zones, filter, recommendedZoneId, onZoneTap, loading]);
+
+  // Keep user + selected Shop&Go visible above the current sheet state.
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map || loading || !recommendedZoneId) return;
+    const selected = zones.find((z) => z.id === recommendedZoneId);
+    if (!selected) return;
+
+    const selectedPos = { lat: selected.lat, lng: selected.lng };
+    if (!userCoords) {
+      map.panTo(selectedPos);
+      map.setZoom(16);
+      return;
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+    bounds.extend(userCoords);
+    bounds.extend(selectedPos);
+    map.fitBounds(bounds, {
+      top: 118,
+      right: 36,
+      bottom: Math.max(120, bottomPadding),
+      left: 36,
+    });
+
+    const listener = google.maps.event.addListenerOnce(map, "idle", () => {
+      if ((map.getZoom() ?? 16) > 17) map.setZoom(17);
+    });
+    return () => google.maps.event.removeListener(listener);
+  }, [recommendedZoneId, zones, userCoords, bottomPadding, loading]);
 
   const recenter = () => {
     const map = mapInstance.current;
@@ -208,7 +232,6 @@ export const NearbyMap = ({
     <div
       className={cn(
         "relative overflow-hidden bg-deep",
-        // round corners only when not full-height
         typeof height === "number" && "rounded-2xl shadow-elevated",
         className
       )}
@@ -230,7 +253,7 @@ export const NearbyMap = ({
               onClick={() => window.location.reload()}
               className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground"
             >
-              🔄 Kaart opnieuw laden
+              Kaart opnieuw laden
             </button>
           </div>
         </div>
@@ -238,12 +261,10 @@ export const NearbyMap = ({
 
       {showFilters && !loading && !error && (
         <div className="absolute left-3 top-3 z-[1] flex gap-1 rounded-full bg-card/95 p-1 shadow-elevated backdrop-blur">
-          {(
-            [
-              { id: "free", label: "Vrij" },
-              { id: "all", label: "Alle" },
-            ] as { id: Filter; label: string }[]
-          ).map((f) => (
+          {([
+            { id: "free", label: "Vrij" },
+            { id: "all", label: "Alle" },
+          ] as { id: Filter; label: string }[]).map((f) => (
             <button
               key={f.id}
               type="button"
