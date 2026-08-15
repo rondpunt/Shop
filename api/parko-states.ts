@@ -11,21 +11,32 @@ const normaliseState = (s: string) => {
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
   try {
-    const upstream = await fetch(PARKO_URL, {
-      headers: { Accept: "application/json", "User-Agent": "shopgo-kortrijk/2.0" },
-    });
-    if (!upstream.ok) throw new Error(`Parko upstream ${upstream.status}`);
-    const data = await upstream.json() as any[];
-    const zoneMap = new Map<string, any>();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+    let upstream: Response;
+    try {
+      upstream = await fetch(PARKO_URL, {
+        headers: { Accept: "application/json", "User-Agent": "shopgo-kortrijk/2.0" },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
+    if (!upstream.ok) throw new Error(`Parko upstream status ${upstream.status}`);
+    const data = await upstream.json() as any[];
+    if (!Array.isArray(data)) throw new Error("Parko returned an invalid payload");
+
+    const zoneMap = new Map<string, any>();
     for (const z of data) {
-      const key = `${z.municipality}-${slug(z.name)}`;
-      const bays = (z.sensors ?? []).map((s: any) => ({
-        id: s.parkingBay,
-        lat: s.latitude,
-        lng: s.longitude,
+      if (!z || !Number.isFinite(Number(z.latitude)) || !Number.isFinite(Number(z.longitude))) continue;
+      const key = `${String(z.municipality || "Kortrijk")}-${slug(String(z.name || "Shop&Go"))}`;
+      const bays = (Array.isArray(z.sensors) ? z.sensors : []).map((s: any) => ({
+        id: String(s.parkingBay || ""),
+        lat: Number(s.latitude),
+        lng: Number(s.longitude),
         state: normaliseState(s.state),
-      }));
+      })).filter((b: any) => b.id && Number.isFinite(b.lat) && Number.isFinite(b.lng));
       const freeBays = bays.filter((b: any) => b.state === "free").length;
       const occupiedBays = bays.filter((b: any) => b.state === "occupied").length;
       const unknownBays = bays.filter((b: any) => b.state === "unknown").length;
@@ -39,10 +50,10 @@ export default async function handler(req: any, res: any) {
       } else {
         zoneMap.set(key, {
           id: key,
-          name: z.name,
-          municipality: z.municipality,
-          lat: z.latitude,
-          lng: z.longitude,
+          name: String(z.name || "Shop&Go"),
+          municipality: String(z.municipality || "Kortrijk"),
+          lat: Number(z.latitude),
+          lng: Number(z.longitude),
           totalBays: bays.length,
           freeBays,
           occupiedBays,
@@ -60,8 +71,9 @@ export default async function handler(req: any, res: any) {
       totalFree: zones.reduce((n: number, z: any) => n + z.freeBays, 0),
       totalBays: zones.reduce((n: number, z: any) => n + z.totalBays, 0),
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Parko proxy failed", error);
-    return res.status(502).json({ error: error?.message || "Live parkeerdata niet beschikbaar" });
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(502).json({ error: "Live parkeerdata tijdelijk niet beschikbaar" });
   }
 }
