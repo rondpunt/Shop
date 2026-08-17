@@ -1,0 +1,1 @@
+import{r as s,j as t}from"./query-CbBxaP1d.js";import{a as o}from"./index-D-6TVXhO.js";import{e}from"./vendor-COaoUKcv.js";import"./ui-l3V7GdXS.js";import"./supabase-CS_lBPWO.js";const c=()=>{const{activeSession:r}=o();return s.useEffect(()=>{},[]),r?t.jsx(e,{to:`/session/${r.id}`,replace:!0}):t.jsx(e,{to:"/",replace:!0})};export{c as default};
