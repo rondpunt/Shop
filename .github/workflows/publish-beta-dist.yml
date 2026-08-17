@@ -1,0 +1,39 @@
+name: Publish beta dist
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-beta-dist.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Publish dist branch
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/shopgo-dist
+          mkdir -p /tmp/shopgo-dist
+          cp -R dist/. /tmp/shopgo-dist/
+          git checkout --orphan vercel-beta-dist
+          git rm -rf .
+          cp -R /tmp/shopgo-dist/. .
+          touch .nojekyll
+          git add -A
+          git config user.name "shopgo-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "beta: publish compiled PWA from main"
+          git push --force origin vercel-beta-dist
