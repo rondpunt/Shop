@@ -21,6 +21,7 @@ const Timer = lazy(() => import("./pages/Timer"));
 const AiAssistant = lazy(() => import("./pages/AiAssistant"));
 const About = lazy(() => import("./pages/About"));
 const Privacy = lazy(() => import("./pages/Privacy"));
+const Install = lazy(() => import("./pages/Install"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -53,6 +54,7 @@ const App = () => (
               <Routes>
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/onboarding" element={<Onboarding />} />
+                <Route path="/install" element={<Install />} />
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Home />} />
                   <Route path="/ai" element={<AiAssistant />} />

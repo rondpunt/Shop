@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { fail, readJsonBody, requireUser } from "../_shared";
+import { fail, readJsonBody, requireUser } from "../_shared.js";
 
 const spots = [
   ["grote-markt", "Grote Markt"], ["leiestraat", "Leiestraat"], ["korte-steenstraat", "Korte Steenstraat"],

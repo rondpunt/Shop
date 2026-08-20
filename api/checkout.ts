@@ -1,4 +1,4 @@
-import { fail, getStripeServer, readJsonBody, requireUser, safeReturnUrl } from "./_shared";
+import { fail, getStripeServer, readJsonBody, requireUser, safeReturnUrl } from "./_shared.js";
 
 const allowedLookupKeys = new Set(["premium_monthly", "premium_yearly"]);
 
