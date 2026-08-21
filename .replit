@@ -34,3 +34,8 @@ externalPort = 80
 [[ports]]
 localPort = 24678
 externalPort = 3001
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["bash", "-c", "cd shopgo-kortrijk-working-copy && npm run start:legacy"]
+build = ["bash", "-c", "cd shopgo-kortrijk-working-copy && npm run build:legacy"]
