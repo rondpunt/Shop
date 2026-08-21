@@ -1,4 +1,4 @@
-import { fail, getAdminClient, getStripeServer, readJsonBody, requireUser } from "./_shared.js";
+import { fail, findStripeCustomerForUser, getAdminClient, getStripeServer, readJsonBody, requireUser } from "./_shared.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -9,8 +9,7 @@ export default async function handler(req: any, res: any) {
     if (!user.email) return res.status(200).json({ status: "none" });
 
     const stripe = getStripeServer();
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    const customer = customers.data[0];
+    const customer = await findStripeCustomerForUser(stripe, user);
     if (!customer) return res.status(200).json({ status: "none" });
 
     const subscriptions = await stripe.subscriptions.list({

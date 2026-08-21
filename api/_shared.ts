@@ -28,6 +28,13 @@ export const getStripeServer = () => {
   return stripeClient;
 };
 
+/** A Stripe customer must be explicitly bound to the authenticated Shop&Go user. */
+export const findStripeCustomerForUser = async (stripe: Stripe, user: { id: string; email?: string | null }) => {
+  if (!user.email) return null;
+  const customers = await stripe.customers.list({ email: user.email, limit: 100 });
+  return customers.data.find((customer) => customer.metadata?.shopgoUserId === user.id) ?? null;
+};
+
 export const readJsonBody = async (req: any) => {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") {
@@ -77,22 +84,21 @@ export const getRequestOrigin = (req: any) => {
 };
 
 export const safeReturnUrl = (req: any, candidate: unknown, path = "/") => {
-  const requestOrigin = normalizeOrigin(getRequestOrigin(req));
   const configured = normalizeOrigin(configuredOrigin);
-  const allowedOrigins = new Set([requestOrigin, configured].filter(Boolean));
+  if (!configured) {
+    throw Object.assign(new Error("Trusted application origin is not configured"), { statusCode: 503 });
+  }
 
   if (typeof candidate === "string" && candidate.length <= 2_048) {
     try {
       const parsed = new URL(candidate);
-      if (allowedOrigins.has(parsed.origin)) return parsed.toString();
+      if (parsed.origin === configured) return parsed.toString();
     } catch {
       // ignore and fall back to a trusted origin below
     }
   }
 
-  const base = requestOrigin || configured;
-  if (!base) throw Object.assign(new Error("Trusted application origin is not configured"), { statusCode: 503 });
-  return new URL(path, base).toString();
+  return new URL(path, configured).toString();
 };
 
 export const fail = (res: any, error: unknown) => {

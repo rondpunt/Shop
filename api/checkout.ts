@@ -23,12 +23,16 @@ export default async function handler(req: any, res: any) {
     const price = prices.data[0];
     if (!price) return res.status(404).json({ error: "Prijs niet gevonden" });
 
+    const customer = await stripe.customers.create({
+      email: user.email || undefined,
+      metadata: { shopgoUserId: user.id },
+    });
     const session = await stripe.checkout.sessions.create({
       line_items: [{ price: price.id, quantity: 1 }],
       mode: price.type === "recurring" ? "subscription" : "payment",
       ui_mode: "embedded",
       return_url: safeReturn,
-      customer_email: user.email || undefined,
+      customer: customer.id,
       client_reference_id: user.id,
       metadata: { userId: user.id },
       ...(price.type === "recurring"

@@ -1,4 +1,4 @@
-import { fail, getStripeServer, readJsonBody, requireUser, safeReturnUrl } from "./_shared.js";
+import { fail, findStripeCustomerForUser, getStripeServer, readJsonBody, requireUser, safeReturnUrl } from "./_shared.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -8,8 +8,7 @@ export default async function handler(req: any, res: any) {
     if (!user.email) return res.status(400).json({ error: "Account heeft geen e-mailadres" });
 
     const stripe = getStripeServer();
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    const customer = customers.data[0];
+    const customer = await findStripeCustomerForUser(stripe, user);
     if (!customer) return res.status(404).json({ error: "Geen abonnementsklant gevonden" });
 
     const session = await stripe.billingPortal.sessions.create({

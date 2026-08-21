@@ -16,7 +16,10 @@ const codeSchema = z.string().trim().length(6, "Code moet 6 cijfers zijn");
 const Auth = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const redirect = params.get("redirect") || "/";
+  const requestedRedirect = params.get("redirect") || "/";
+  const redirect = requestedRedirect.startsWith("/") && !requestedRedirect.startsWith("//")
+    ? requestedRedirect
+    : "/";
   const { session } = useAuth();
   
   const [step, setStep] = useState<"email" | "code">("email");
@@ -31,7 +34,7 @@ const Auth = () => {
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const origin = event.origin;
-      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
+      if (origin !== window.location.origin) {
         return;
       }
       if (event.data?.type === "SUPABASE_AUTH_SUCCESS" && event.data?.session) {
