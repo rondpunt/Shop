@@ -1,2 +1,3 @@
 - [Clerk server runtime](clerk-node-runtime.md) — Server-side Replit Clerk identity operations require Node 22+ for native WebSocket support.
 - [Cloud-only user data](cloud-only-user-data.md) — Parking sessions and vehicles must use the shared Supabase account; local storage is not a data fallback.
+- [Dependency lock synchronization](dependency-lock-synchronization.md) — Verify package installs target the nested app and update its lockfile, not only workspace-level packages.

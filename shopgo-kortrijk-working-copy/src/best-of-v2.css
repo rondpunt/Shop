@@ -1,0 +1,132 @@
+/* Best-of v2 visual polish. Kept separate from the legacy design system so rollback is easy. */
+.smart-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: .32rem .62rem;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+  border: 1px solid rgba(15,23,42,.08);
+  background: rgba(248,250,252,.92);
+  color: #475569;
+  box-shadow: 0 1px 0 rgba(255,255,255,.8) inset;
+}
+.smart-chip-good { color: #087f65; background: rgba(0,200,150,.10); border-color: rgba(0,200,150,.20); }
+.smart-chip-soon { color: #9a5b00; background: rgba(255,165,0,.10); border-color: rgba(255,165,0,.22); }
+.smart-chip-community { color: #4353b3; background: rgba(99,102,241,.09); border-color: rgba(99,102,241,.18); }
+.smart-chip-neutral { color: #64748b; background: rgba(148,163,184,.10); border-color: rgba(148,163,184,.16); }
+
+.best-map-card {
+  border: 1px solid rgba(15,23,42,.06);
+  background: linear-gradient(145deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+  box-shadow: 0 18px 40px -24px rgba(15,23,42,.42), 0 1px 0 rgba(255,255,255,.9) inset;
+}
+
+.premium-sheen {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.premium-sheen::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 220px;
+  height: 220px;
+  right: -90px;
+  top: -120px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(0,200,150,.22), rgba(0,200,150,0) 68%);
+}
+
+/* Motion is short and directional: it helps orientation without distracting a driver. */
+@keyframes shopgo-page-enter {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes shopgo-status-in {
+  0% { opacity: .35; transform: scale(.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.app-page-panel {
+  animation: shopgo-page-enter 240ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.card-soft,
+.btn-pill-primary,
+.btn-pill-outline {
+  transition-property: transform, box-shadow, border-color, background-color, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(.2,.8,.2,1);
+}
+
+.card-soft:active,
+.btn-pill-primary:active,
+.btn-pill-outline:active {
+  transform: scale(.985);
+}
+
+.motion-status-in {
+  animation: shopgo-status-in 220ms ease-out both;
+}
+
+/* A touch of motion gives the map a live feel without distracting a driver. */
+@keyframes shopgo-aurora-drift {
+  0%, 100% { transform: translate3d(-5%, -3%, 0) scale(1); opacity: .46; }
+  50% { transform: translate3d(7%, 5%, 0) scale(1.16); opacity: .78; }
+}
+@keyframes shopgo-marker-float {
+  0%, 100% { transform: translate(-50%, -100%); }
+  50% { transform: translate(-50%, calc(-100% - 3px)); }
+}
+@keyframes shopgo-install-nudge {
+  from { opacity: 0; transform: translate3d(0, 16px, 0) scale(.97); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes shopgo-logo-float {
+  0%, 100% { transform: translateY(0); filter: drop-shadow(0 3px 10px rgba(0,200,150,.3)); }
+  50% { transform: translateY(-1px); filter: drop-shadow(0 5px 15px rgba(0,200,150,.52)); }
+}
+@keyframes shopgo-cta-shine {
+  0% { transform: translateX(-140%) skewX(-18deg); }
+  65%, 100% { transform: translateX(240%) skewX(-18deg); }
+}
+
+.logo-mark { filter: drop-shadow(0 2px 5px rgba(0,0,0,.22)); }
+.brand-lockup { filter: none; }
+.sheet-surface { box-shadow: 0 -12px 30px -18px rgba(7,13,27,.42), 0 1px 0 rgba(255,255,255,.9) inset; }
+.sheet-grip { box-shadow: 0 1px 2px rgba(15,23,42,.14) inset; }
+.live-badge::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 999px; background: currentColor; box-shadow: 0 0 0 0 rgba(0,200,150,.5); animation: pulse-dot 1.6s ease-out infinite; }
+.loading-card { border-radius: 18px; background: linear-gradient(120deg, rgba(15,23,42,.045), rgba(0,200,150,.07), rgba(15,23,42,.045)); }
+.loading-shimmer { background: linear-gradient(90deg, rgba(148,163,184,.16), rgba(0,200,150,.32), rgba(148,163,184,.16)); background-size: 220% 100%; animation: shopgo-cta-shine 1.8s ease-in-out infinite; }
+.nav-cta { position: relative; overflow: hidden; box-shadow: 0 10px 22px -10px rgba(0,200,150,.9), inset 0 1px 0 rgba(255,255,255,.42); }
+.nav-cta::after { content: ""; position: absolute; inset: 0; width: 30%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.38), transparent); animation: shopgo-cta-shine 3.4s ease-in-out infinite; }
+.map-fallback-bg { background-color: #0b1728; background-image: linear-gradient(26deg, transparent 47%, rgba(141,167,198,.18) 48%, rgba(141,167,198,.18) 49.1%, transparent 50.2%), linear-gradient(117deg, transparent 47%, rgba(141,167,198,.13) 48%, rgba(141,167,198,.13) 49%, transparent 50%), linear-gradient(180deg, rgba(255,255,255,.018), transparent 32%, rgba(0,0,0,.16)); background-size: 188px 188px, 244px 244px, 100% 100%; }
+.map-depth { position: absolute; border-radius: 50%; pointer-events: none; }
+.map-depth-one { left: -28%; top: -15%; width: 76%; aspect-ratio: 1; background: radial-gradient(circle, rgba(0,200,150,.14), transparent 70%); }
+.map-depth-two { right: -35%; bottom: 4%; width: 80%; aspect-ratio: 1; background: radial-gradient(circle, rgba(64,104,255,.12), transparent 70%); }
+.map-marker { animation: shopgo-marker-float 3.2s ease-in-out infinite; }
+.map-marker-selected { animation-duration: 2.1s; }
+.animate-install-nudge { animation: shopgo-install-nudge .42s cubic-bezier(.2,.8,.2,1) both; }
+.install-nudge { background: linear-gradient(135deg, rgba(10,22,38,.96), rgba(19,54,61,.94)); border: 1px solid rgba(255,255,255,.13); box-shadow: 0 20px 42px -16px rgba(1,8,17,.75), 0 1px 0 rgba(255,255,255,.12) inset; backdrop-filter: blur(18px); }
+.install-nudge-icon { background: linear-gradient(145deg, rgba(0,200,150,.3), rgba(0,200,150,.12)); color: #72f1d3; box-shadow: 0 0 18px rgba(0,200,150,.22); }
+
+@media (display-mode: standalone) {
+  .pwa-browser-only { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .pulse-dot, .animate-pulse-danger { animation: none !important; }
+  .logo-mark, .map-marker, .animate-install-nudge, .loading-shimmer, .nav-cta::after { animation: none !important; }
+}
