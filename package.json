@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "tsx server.ts",
+    "dev:frontend": "vite",
     "dev:legacy": "tsx server.ts",
     "build": "vite build",
     "build:pwa": "vite build",

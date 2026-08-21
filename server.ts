@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 5000;
 
 // Curated Shop & Go spots in Kortrijk for Gemini matching
 const SHOPGO_SPOTS = [
@@ -190,10 +190,18 @@ function getStripeServer(): Stripe {
   return stripeClient;
 }
 
-// Initialize Supabase Admin for verifying tokens
 const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://placeholder-project.supabase.co";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "placeholder-key";
-const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
+let supabaseAdmin: ReturnType<typeof createClient> | null = null;
+
+// Only payment routes need a Supabase client. Creating it at server startup
+// initializes Supabase Realtime, which is unavailable in this Node 20 runtime.
+function getSupabaseAdmin() {
+  if (!supabaseAdmin) {
+    supabaseAdmin = createClient(supabaseUrl, supabaseKey);
+  }
+  return supabaseAdmin;
+}
 
 app.post("/api/checkout", async (req, res) => {
   try {
@@ -204,7 +212,7 @@ app.post("/api/checkout", async (req, res) => {
     const token = authHeader?.replace("Bearer ", "");
     if (!token) return res.status(401).json({ error: "Unauthorized" });
 
-    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authErr } = await getSupabaseAdmin().auth.getUser(token);
     if (authErr || !user) return res.status(401).json({ error: "Unauthorized" });
 
     const stripe = getStripeServer();
@@ -240,7 +248,7 @@ app.post("/api/customer-portal", async (req, res) => {
     const token = authHeader?.replace("Bearer ", "");
     if (!token) return res.status(401).json({ error: "Unauthorized" });
 
-    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authErr } = await getSupabaseAdmin().auth.getUser(token);
     if (authErr || !user) return res.status(401).json({ error: "Unauthorized" });
 
     const stripe = getStripeServer();
@@ -270,7 +278,7 @@ app.post("/api/check-subscription", async (req, res) => {
     const authHeader = req.headers.authorization;
     const token = authHeader?.replace("Bearer ", "");
     if (!token) return res.status(401).json({ error: "Unauthorized" });
-    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authErr } = await getSupabaseAdmin().auth.getUser(token);
     if (authErr || !user) return res.status(401).json({ error: "Unauthorized" });
 
     const stripe = getStripeServer();
@@ -289,7 +297,7 @@ app.post("/api/check-subscription", async (req, res) => {
     const sub = subscriptions.data[0];
     
     // Upsert subscription into Supabase
-    await supabaseAdmin
+    await getSupabaseAdmin()
       .from("subscriptions")
       .upsert({
         user_id: user.id,
