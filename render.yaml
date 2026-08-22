@@ -1,0 +1,43 @@
+# Render Blueprint — one full-stack web service that serves the built PWA and the /api routes.
+# Deploy: push to GitHub, then in Render choose "New +" > "Blueprint" and point it at this repo.
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: shopgo-kortrijk
+    runtime: node
+    plan: free
+    region: frankfurt
+    # --include=dev is required so the Vite/esbuild build tools are available even when
+    # NODE_ENV=production would otherwise omit devDependencies.
+    buildCommand: npm ci --include=dev && npm run build:legacy
+    startCommand: npm run start:legacy
+    healthCheckPath: /api/shopgo-spots
+    autoDeploy: false
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Canonical public origin, used to validate Stripe return URLs. Set to the service URL,
+      # e.g. https://shopgo-kortrijk.onrender.com
+      - key: APP_ORIGIN
+        sync: false
+      # --- Optional. The core app (map, live Parko data, timer) runs without these. ---
+      # Server-only secrets (never prefixed with VITE_):
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      # Public browser config (embedded into the client bundle at build time):
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_PROJECT_ID
+        sync: false
+      - key: VITE_GOOGLE_MAPS_PLATFORM_KEY
+        sync: false
+      - key: VITE_PAYMENTS_CLIENT_TOKEN
+        sync: false
