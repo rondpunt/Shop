@@ -75,3 +75,57 @@ These are not code vulnerabilities but must be completed for a public commercial
 
 ## Release rule
 A beta is only considered releasable after the latest commit passes both CI jobs and the deployed Vercel URL passes smoke, API, browser-shape and performance checks.
+
+---
+
+# Follow-up audit — 2026-08-22 (self-hosted parity)
+
+The 2026-08-15 audit hardened the Vercel serverless functions in `api/`, but the legacy
+Express server in `server.ts` — used for local development and for any single-service
+self-hosted deployment (e.g. Render) — still contained the pre-audit code. This pass brings the
+self-hosted path to parity by routing it through the same hardened helpers in `api/_shared.ts`.
+
+## Findings resolved in `server.ts`
+
+### F1. AI endpoint had no authentication — FIXED
+`POST /api/gemini/assistant` previously ran with no auth, allowing anonymous consumption of paid
+Gemini quota. It now requires a valid Supabase bearer session and bounds request text/history size.
+
+### F2. Stripe return URL was client-controlled — FIXED
+`/api/checkout` and `/api/customer-portal` passed the client-supplied `returnUrl` straight to
+Stripe (open-redirect / phishing vector). Return URLs are now validated against the trusted
+`APP_ORIGIN` via `safeReturnUrl`.
+
+### F3. Stripe customer matched by email only — FIXED
+Checkout/portal/subscription lookups matched customers by email, which could bind a session to the
+wrong account. Customers are now created with `metadata.shopgoUserId` and looked up by that
+owner id.
+
+### F4. Checkout accepted arbitrary price ids — FIXED
+`priceId` is now restricted to an allowlist of known lookup keys (`premium_monthly`,
+`premium_yearly`).
+
+### F5. Supabase admin used placeholder fallback — FIXED
+The Express server no longer instantiates a Supabase admin client from `"placeholder-key"`; it
+fails closed (503) when the URL or service-role key is missing.
+
+### F6. Verbose error messages leaked to clients — FIXED
+All endpoints now return generic messages for 5xx responses; details are logged server-side only.
+
+### F7. Security headers were Vercel-only — FIXED
+`vercel.json` headers do not run when self-hosted. `server.ts` now applies the same CSP,
+`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` and
+`Cross-Origin-Opener-Policy` on every response (with `upgrade-insecure-requests` added only when
+served over HTTPS). `X-Powered-By` is disabled and JSON bodies are capped at 100 kB.
+
+## Dependency advisory (accepted, dev-only)
+`npm audit` reports GHSA-67mh-4wv8-2f99 (esbuild ≤ 0.24.2 via `vite` ≤ 6.4.2). This affects only the
+**Vite dev server**; production serves pre-built static assets and the bundled Express server, which
+do not run esbuild's dev server. The only published fix is `vite@8` (a breaking major upgrade that
+would also require updating `vite-plugin-pwa` and the SWC React plugin), so it is deferred rather
+than force-applied. It is not exploitable in production.
+
+## Hosting
+The app can be self-hosted as a single Node web service (`build:legacy` + `start:legacy`, see
+`render.yaml`) with the same security posture as the Vercel deployment, or on Vercel using the
+committed `vercel.json` and the `api/` functions. The server binds to `0.0.0.0:$PORT`.
