@@ -1,11 +1,25 @@
 import express from "express";
 import path from "path";
-import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import {
+  fail,
+  findStripeCustomerForUser,
+  getAdminClient,
+  getStripeServer,
+  readJsonBody,
+  requireUser,
+  safeReturnUrl,
+} from "./api/_shared";
 
-const PORT = 3000;
+// Bind to the platform-provided port (Render/Fly/Heroku set $PORT); fall back to 3000 for local dev.
+const PORT = Number(process.env.PORT) || 3000;
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+// Only these Stripe lookup keys may be purchased. Prevents arbitrary/price-shopping checkout sessions.
+const ALLOWED_LOOKUP_KEYS = new Set(["premium_monthly", "premium_yearly"]);
+
+// Bound all free-form user text before it reaches the AI provider to limit abuse and cost.
+const cleanText = (value: unknown, max = 1200) => String(value ?? "").trim().slice(0, max);
 
 // Curated Shop & Go spots in Kortrijk for Gemini matching
 const SHOPGO_SPOTS = [
@@ -37,33 +51,70 @@ const SHOPGO_SPOTS = [
   { id: "sint-amandsplein", name: "Sint-Amandsplein", street: "Sint-Amandsplein", bays: 4 }
 ];
 
-// Lazy-loaded GoogleGenAI Client
+// Lazy-loaded GoogleGenAI Client. Fails closed (503) when the API key is absent.
 let aiClient: GoogleGenAI | null = null;
-
 function getAiClient(): GoogleGenAI {
   if (!aiClient) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error("GEMINI_API_KEY environment variable is required. Please set it in Settings > Secrets.");
+      throw Object.assign(new Error("AI is tijdelijk niet beschikbaar"), { statusCode: 503 });
     }
     aiClient = new GoogleGenAI({
       apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
+      httpOptions: { headers: { "User-Agent": "aistudio-build" } },
     });
   }
   return aiClient;
 }
 
+// Security headers applied to every response. When self-hosted (Express) the Vercel `headers`
+// config in vercel.json does not run, so we mirror it here to keep the deployed posture identical.
+const CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self' https://checkout.stripe.com",
+  "script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com https://js.stripe.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "img-src 'self' data: blob: https://maps.googleapis.com https://maps.gstatic.com https://*.googleapis.com https://*.ggpht.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://*.googleapis.com https://api.stripe.com https://r.stripe.com",
+  "frame-src https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+].join("; ");
+
+function applySecurityHeaders(req: express.Request, res: express.Response, next: express.NextFunction) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(self), geolocation=(self), microphone=()");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+
+  // Only force HTTPS upgrades when the request is actually served over TLS, so local http dev keeps working.
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const isHttps = forwardedProto === "https" || (req as any).secure === true;
+  res.setHeader(
+    "Content-Security-Policy",
+    isHttps ? `${CSP_DIRECTIVES}; upgrade-insecure-requests` : CSP_DIRECTIVES,
+  );
+
+  // Default API responses to non-cacheable; individual public endpoints may relax this afterwards.
+  if (req.path.startsWith("/api/")) res.setHeader("Cache-Control", "no-store");
+  next();
+}
+
 async function startServer() {
   const app = express();
-  app.use(express.json());
+  app.disable("x-powered-by");
+  app.use(applySecurityHeaders);
+  // Cap request bodies to blunt trivial memory-exhaustion attempts.
+  app.use(express.json({ limit: "100kb" }));
 
-  // API Endpoints
-  app.get("/api/parko-states", async (req, res) => {
+  // ---- Public endpoints (no secrets, safe to serve unauthenticated) ----
+
+  app.get("/api/parko-states", async (_req, res) => {
     try {
       const PARKO_URL = "https://shop.parko.be/m/restv1/parkodata/ShopAndGoStates";
       const slug = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^\w]+/g, "-").replace(/^-+|-+$/g, "");
@@ -78,7 +129,7 @@ async function startServer() {
       });
       if (!response.ok) throw new Error(`Parko upstream ${response.status}`);
       const data = await response.json();
-      
+
       const zoneMap = new Map<string, any>();
       for (const z of data) {
         const key = `${z.municipality}-${slug(z.name)}`;
@@ -121,199 +172,197 @@ async function startServer() {
         totalFree: zones.reduce((a: number, z: any) => a + z.freeBays, 0),
         totalBays: zones.reduce((a: number, z: any) => a + z.totalBays, 0),
       };
-      // Simple Cache-Control to avoid spamming the endpoint
       res.setHeader("Cache-Control", "public, max-age=20");
       res.json(payload);
     } catch (error: any) {
       console.error("Parko API Error:", error);
-      res.status(502).json({ error: error.message || "Interne serverfout" });
+      res.status(502).json({ error: "Interne serverfout" });
     }
   });
 
-  app.get("/api/shopgo-spots", async (req, res) => {
+  app.get("/api/shopgo-spots", async (_req, res) => {
+    const SPOTS = [
+      { id: "grote-markt",            name: "Grote Markt",            street: "Grote Markt",                  lat: 50.8275, lng: 3.2647, bays: 8, verification: "manual" },
+      { id: "leiestraat",             name: "Leiestraat",             street: "Leiestraat",                   lat: 50.8268, lng: 3.2632, bays: 6, verification: "manual" },
+      { id: "korte-steenstraat",      name: "Korte Steenstraat",      street: "Korte Steenstraat",            lat: 50.8262, lng: 3.2638, bays: 4, verification: "manual" },
+      { id: "lange-steenstraat",      name: "Lange Steenstraat",      street: "Lange Steenstraat",            lat: 50.8255, lng: 3.2630, bays: 5, verification: "manual" },
+      { id: "doorniksestraat",        name: "Doorniksestraat",        street: "Doorniksestraat",              lat: 50.8240, lng: 3.2660, bays: 7, verification: "manual" },
+      { id: "doorniksewijk",          name: "Doorniksewijk",          street: "Doorniksewijk",                lat: 50.8215, lng: 3.2685, bays: 6, verification: "manual" },
+      { id: "rijselsestraat",         name: "Rijselsestraat",         street: "Rijselsestraat",               lat: 50.8248, lng: 3.2608, bays: 5, verification: "manual" },
+      { id: "budastraat",             name: "Budastraat",             street: "Budastraat",                   lat: 50.8290, lng: 3.2635, bays: 4, verification: "unverified" },
+      { id: "voorstraat",             name: "Voorstraat",             street: "Voorstraat",                   lat: 50.8285, lng: 3.2670, bays: 4, verification: "unverified" },
+      { id: "graanmarkt",             name: "Graanmarkt",             street: "Graanmarkt",                   lat: 50.8278, lng: 3.2660, bays: 6, verification: "manual" },
+      { id: "vlasmarkt",              name: "Vlasmarkt",              street: "Vlasmarkt",                    lat: 50.8272, lng: 3.2655, bays: 5, verification: "manual" },
+      { id: "houtmarkt",              name: "Houtmarkt",              street: "Houtmarkt",                    lat: 50.8258, lng: 3.2655, bays: 5, verification: "manual" },
+      { id: "sint-maartenskerkhof",   name: "Sint-Maartenskerkhof",   street: "Sint-Maartenskerkhof",         lat: 50.8270, lng: 3.2670, bays: 3, verification: "unverified" },
+      { id: "schouwburgplein",        name: "Schouwburgplein",        street: "Schouwburgplein",              lat: 50.8252, lng: 3.2670, bays: 4, verification: "manual" },
+      { id: "veemarkt",               name: "Veemarkt",               street: "Veemarkt",                     lat: 50.8298, lng: 3.2650, bays: 6, verification: "manual" },
+      { id: "overbekeplein",          name: "Overbekeplein",          street: "Overbekeplein",                lat: 50.8235, lng: 3.2690, bays: 4, verification: "unverified" },
+      { id: "wandelingstraat",        name: "Wandelingstraat",        street: "Wandelingstraat",              lat: 50.8225, lng: 3.2645, bays: 4, verification: "unverified" },
+      { id: "noordstraat",            name: "Noordstraat",            street: "Noordstraat",                  lat: 50.8265, lng: 3.2615, bays: 5, verification: "manual" },
+      { id: "zwevegemsestraat",       name: "Zwevegemsestraat",       street: "Zwevegemsestraat",             lat: 50.8285, lng: 3.2705, bays: 5, verification: "unverified" },
+      { id: "burgemeester-reynaert",  name: "Reynaertstraat",         street: "Burgemeester Reynaertstraat",  lat: 50.8295, lng: 3.2680, bays: 4, verification: "unverified" },
+      { id: "groeningestraat",        name: "Groeningestraat",        street: "Groeningestraat",              lat: 50.8232, lng: 3.2670, bays: 4, verification: "manual" },
+      { id: "magdalenastraat",        name: "Magdalenastraat",        street: "Magdalenastraat",              lat: 50.8268, lng: 3.2685, bays: 3, verification: "unverified" },
+      { id: "sint-jansstraat",        name: "Sint-Jansstraat",        street: "Sint-Jansstraat",              lat: 50.8262, lng: 3.2622, bays: 3, verification: "unverified" },
+      { id: "olv-straat",             name: "O.L.V.-straat",          street: "Onze-Lieve-Vrouwestraat",      lat: 50.8285, lng: 3.2645, bays: 4, verification: "manual" },
+      { id: "lekkerbeetstraat",       name: "Lekkerbeetstraat",       street: "Lekkerbeetstraat",             lat: 50.8280, lng: 3.2625, bays: 3, verification: "unverified" },
+      { id: "sint-amandsplein",       name: "Sint-Amandsplein",       street: "Sint-Amandsplein",             lat: 50.8278, lng: 3.2680, bays: 4, verification: "manual" },
+    ];
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.json({
+      spots: SPOTS,
+      count: SPOTS.length,
+      updated_at: new Date().toISOString(),
+      disclaimer: "Voorlopige lijst — geen officiële realtime bron. Controleer altijd de borden ter plaatse.",
+    });
+  });
+
+  // ---- Authenticated payment endpoints (mirror the hardened Vercel functions in /api) ----
+
+  app.post("/api/checkout", async (req, res) => {
     try {
-      const SPOTS = [
-        { id: "grote-markt",            name: "Grote Markt",            street: "Grote Markt",                  lat: 50.8275, lng: 3.2647, bays: 8, verification: "manual" },
-        { id: "leiestraat",             name: "Leiestraat",             street: "Leiestraat",                   lat: 50.8268, lng: 3.2632, bays: 6, verification: "manual" },
-        { id: "korte-steenstraat",      name: "Korte Steenstraat",      street: "Korte Steenstraat",            lat: 50.8262, lng: 3.2638, bays: 4, verification: "manual" },
-        { id: "lange-steenstraat",      name: "Lange Steenstraat",      street: "Lange Steenstraat",            lat: 50.8255, lng: 3.2630, bays: 5, verification: "manual" },
-        { id: "doorniksestraat",        name: "Doorniksestraat",        street: "Doorniksestraat",              lat: 50.8240, lng: 3.2660, bays: 7, verification: "manual" },
-        { id: "doorniksewijk",          name: "Doorniksewijk",          street: "Doorniksewijk",                lat: 50.8215, lng: 3.2685, bays: 6, verification: "manual" },
-        { id: "rijselsestraat",         name: "Rijselsestraat",         street: "Rijselsestraat",               lat: 50.8248, lng: 3.2608, bays: 5, verification: "manual" },
-        { id: "budastraat",             name: "Budastraat",             street: "Budastraat",                   lat: 50.8290, lng: 3.2635, bays: 4, verification: "unverified" },
-        { id: "voorstraat",             name: "Voorstraat",             street: "Voorstraat",                   lat: 50.8285, lng: 3.2670, bays: 4, verification: "unverified" },
-        { id: "graanmarkt",             name: "Graanmarkt",             street: "Graanmarkt",                   lat: 50.8278, lng: 3.2660, bays: 6, verification: "manual" },
-        { id: "vlasmarkt",              name: "Vlasmarkt",              street: "Vlasmarkt",                    lat: 50.8272, lng: 3.2655, bays: 5, verification: "manual" },
-        { id: "houtmarkt",              name: "Houtmarkt",              street: "Houtmarkt",                    lat: 50.8258, lng: 3.2655, bays: 5, verification: "manual" },
-        { id: "sint-maartenskerkhof",   name: "Sint-Maartenskerkhof",   street: "Sint-Maartenskerkhof",         lat: 50.8270, lng: 3.2670, bays: 3, verification: "unverified" },
-        { id: "schouwburgplein",        name: "Schouwburgplein",        street: "Schouwburgplein",              lat: 50.8252, lng: 3.2670, bays: 4, verification: "manual" },
-        { id: "veemarkt",               name: "Veemarkt",               street: "Veemarkt",                     lat: 50.8298, lng: 3.2650, bays: 6, verification: "manual" },
-        { id: "overbekeplein",          name: "Overbekeplein",          street: "Overbekeplein",                lat: 50.8235, lng: 3.2690, bays: 4, verification: "unverified" },
-        { id: "wandelingstraat",        name: "Wandelingstraat",        street: "Wandelingstraat",              lat: 50.8225, lng: 3.2645, bays: 4, verification: "unverified" },
-        { id: "noordstraat",            name: "Noordstraat",            street: "Noordstraat",                  lat: 50.8265, lng: 3.2615, bays: 5, verification: "manual" },
-        { id: "zwevegemsestraat",       name: "Zwevegemsestraat",       street: "Zwevegemsestraat",             lat: 50.8285, lng: 3.2705, bays: 5, verification: "unverified" },
-        { id: "burgemeester-reynaert",  name: "Reynaertstraat",         street: "Burgemeester Reynaertstraat",  lat: 50.8295, lng: 3.2680, bays: 4, verification: "unverified" },
-        { id: "groeningestraat",        name: "Groeningestraat",        street: "Groeningestraat",              lat: 50.8232, lng: 3.2670, bays: 4, verification: "manual" },
-        { id: "magdalenastraat",        name: "Magdalenastraat",        street: "Magdalenastraat",              lat: 50.8268, lng: 3.2685, bays: 3, verification: "unverified" },
-        { id: "sint-jansstraat",        name: "Sint-Jansstraat",        street: "Sint-Jansstraat",              lat: 50.8262, lng: 3.2622, bays: 3, verification: "unverified" },
-        { id: "olv-straat",             name: "O.L.V.-straat",          street: "Onze-Lieve-Vrouwestraat",      lat: 50.8285, lng: 3.2645, bays: 4, verification: "manual" },
-        { id: "lekkerbeetstraat",       name: "Lekkerbeetstraat",       street: "Lekkerbeetstraat",             lat: 50.8280, lng: 3.2625, bays: 3, verification: "unverified" },
-        { id: "sint-amandsplein",       name: "Sint-Amandsplein",       street: "Sint-Amandsplein",             lat: 50.8278, lng: 3.2680, bays: 4, verification: "manual" },
-      ];
-      res.setHeader("Cache-Control", "public, max-age=300");
-      res.json({
-        spots: SPOTS,
-        count: SPOTS.length,
-        updated_at: new Date().toISOString(),
-        disclaimer: "Voorlopige lijst — geen officiële realtime bron. Controleer altijd de borden ter plaatse.",
+      const user = await requireUser(req);
+      const { priceId, returnUrl } = await readJsonBody(req);
+      const lookupKey = String(priceId || "");
+      if (!ALLOWED_LOOKUP_KEYS.has(lookupKey)) {
+        return res.status(400).json({ error: "Ongeldig abonnement" });
+      }
+
+      const safeReturn = safeReturnUrl(
+        req,
+        returnUrl,
+        "/premium?checkout=success&session_id={CHECKOUT_SESSION_ID}",
+      );
+
+      const stripe = getStripeServer();
+      const prices = await stripe.prices.list({ lookup_keys: [lookupKey], active: true, limit: 1 });
+      const price = prices.data[0];
+      if (!price) return res.status(404).json({ error: "Prijs niet gevonden" });
+
+      const customer = await stripe.customers.create({
+        email: user.email || undefined,
+        metadata: { shopgoUserId: user.id },
       });
-    } catch (error: any) {
-      console.error("Spots API Error:", error);
-      res.status(502).json({ error: error.message || "Interne serverfout" });
+      const session = await stripe.checkout.sessions.create({
+        line_items: [{ price: price.id, quantity: 1 }],
+        mode: price.type === "recurring" ? "subscription" : "payment",
+        ui_mode: "embedded",
+        return_url: safeReturn,
+        customer: customer.id,
+        client_reference_id: user.id,
+        metadata: { userId: user.id },
+        ...(price.type === "recurring"
+          ? { subscription_data: { metadata: { userId: user.id } } }
+          : {}),
+      });
+
+      if (!session.client_secret) throw new Error("Checkout kon niet worden gestart");
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ clientSecret: session.client_secret });
+    } catch (error) {
+      return fail(res, error);
     }
   });
 
-  
+  app.post("/api/customer-portal", async (req, res) => {
+    try {
+      const user = await requireUser(req);
+      const { returnUrl } = await readJsonBody(req);
+      if (!user.email) return res.status(400).json({ error: "Account heeft geen e-mailadres" });
 
+      const stripe = getStripeServer();
+      const customer = await findStripeCustomerForUser(stripe, user);
+      if (!customer) return res.status(404).json({ error: "Geen abonnementsklant gevonden" });
 
-
-// Initialize Stripe (lazy initialization, only fail if actually used without key)
-let stripeClient: Stripe | null = null;
-function getStripeServer(): Stripe {
-  if (!stripeClient) {
-    const key = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_LIVE_API_KEY || process.env.STRIPE_SANDBOX_API_KEY;
-    if (!key) {
-      throw new Error("STRIPE_SECRET_KEY environment variable is required for payments");
+      const session = await stripe.billingPortal.sessions.create({
+        customer: customer.id,
+        return_url: safeReturnUrl(req, returnUrl, "/premium"),
+      });
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ url: session.url });
+    } catch (error) {
+      return fail(res, error);
     }
-    stripeClient = new Stripe(key, { apiVersion: "2024-04-10" });
-  }
-  return stripeClient;
-}
+  });
 
-// Initialize Supabase Admin for verifying tokens
-const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://placeholder-project.supabase.co";
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "placeholder-key";
-const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
+  app.post("/api/check-subscription", async (req, res) => {
+    try {
+      const user = await requireUser(req);
+      const { environment = "live" } = await readJsonBody(req);
+      const env = environment === "sandbox" ? "sandbox" : "live";
+      if (!user.email) return res.status(200).json({ status: "none" });
 
-app.post("/api/checkout", async (req, res) => {
-  try {
-    const { priceId, returnUrl, environment } = req.body;
-    if (!priceId || !returnUrl) return res.status(400).json({ error: "Missing parameters" });
+      const stripe = getStripeServer();
+      const customer = await findStripeCustomerForUser(stripe, user);
+      if (!customer) return res.status(200).json({ status: "none" });
 
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.replace("Bearer ", "");
-    if (!token) return res.status(401).json({ error: "Unauthorized" });
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customer.id,
+        status: "all",
+        limit: 10,
+      });
+      const sub = subscriptions.data.sort(
+        (a: any, b: any) => Number(b.created || 0) - Number(a.created || 0),
+      )[0];
+      if (!sub) return res.status(200).json({ status: "none" });
 
-    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
-    if (authErr || !user) return res.status(401).json({ error: "Unauthorized" });
-
-    const stripe = getStripeServer();
-    const prices = await stripe.prices.list({ lookup_keys: [priceId] });
-    if (!prices.data.length) return res.status(404).json({ error: "Price not found" });
-
-    const stripePrice = prices.data[0];
-    const isRecurring = stripePrice.type === "recurring";
-
-    const session = await stripe.checkout.sessions.create({
-      line_items: [{ price: stripePrice.id, quantity: 1 }],
-      mode: isRecurring ? "subscription" : "payment",
-      ui_mode: "embedded_page",
-      return_url: returnUrl,
-      customer_email: user.email,
-      metadata: { userId: user.id },
-      ...(isRecurring && {
-        subscription_data: { metadata: { userId: user.id } },
-      }),
-    });
-
-    res.json({ clientSecret: session.client_secret });
-  } catch (err: any) {
-    console.error("Checkout error:", err);
-    res.status(500).json({ error: err.message || "Internal server error" });
-  }
-});
-
-app.post("/api/customer-portal", async (req, res) => {
-  try {
-    const { returnUrl } = req.body;
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.replace("Bearer ", "");
-    if (!token) return res.status(401).json({ error: "Unauthorized" });
-
-    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
-    if (authErr || !user) return res.status(401).json({ error: "Unauthorized" });
-
-    const stripe = getStripeServer();
-    
-    // We need to find the stripe customer ID for this user.
-    // Ideally this is stored in a 'profiles' table or similar.
-    // For now, we will search Stripe customers by email.
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    if (!customers.data.length) return res.status(404).json({ error: "Customer not found in Stripe" });
-
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customers.data[0].id,
-      return_url: returnUrl || `${req.protocol}://${req.get("host")}/`,
-    });
-
-    res.json({ url: session.url });
-  } catch (err: any) {
-    console.error("Portal error:", err);
-    res.status(500).json({ error: err.message || "Internal server error" });
-  }
-});
-
-
-  
-app.post("/api/check-subscription", async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.replace("Bearer ", "");
-    if (!token) return res.status(401).json({ error: "Unauthorized" });
-    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
-    if (authErr || !user) return res.status(401).json({ error: "Unauthorized" });
-
-    const stripe = getStripeServer();
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    if (!customers.data.length) return res.json({ status: "none" });
-
-    const subscriptions = await stripe.subscriptions.list({
-      customer: customers.data[0].id,
-      status: "all",
-      limit: 1,
-      expand: ["data.default_payment_method"]
-    });
-    
-    if (!subscriptions.data.length) return res.json({ status: "none" });
-    
-    const sub = subscriptions.data[0];
-    
-    // Upsert subscription into Supabase
-    await supabaseAdmin
-      .from("subscriptions")
-      .upsert({
+      const row = {
         user_id: user.id,
-        environment: req.body.environment || "live",
+        environment: env,
+        stripe_customer_id: customer.id,
+        stripe_subscription_id: sub.id,
         status: sub.status,
-        price_id: sub.items.data[0].price.id,
-        current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+        price_id: sub.items.data[0]?.price?.id ?? null,
+        product_id:
+          typeof sub.items.data[0]?.price?.product === "string"
+            ? sub.items.data[0].price.product
+            : null,
+        current_period_end: (sub as any).items.data[0]?.current_period_end
+          ? new Date((sub as any).items.data[0].current_period_end * 1000).toISOString()
+          : null,
         cancel_at_period_end: sub.cancel_at_period_end,
-      }, { onConflict: "user_id, environment" });
+        updated_at: new Date().toISOString(),
+      };
 
-    res.json({ status: sub.status });
-  } catch (err: any) {
-    console.error("Check sub error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
+      const supabaseAdmin = getAdminClient();
+      const { data: existing } = await supabaseAdmin
+        .from("subscriptions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("environment", env)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing?.id) {
+        await supabaseAdmin.from("subscriptions").update(row).eq("id", existing.id);
+      } else {
+        await supabaseAdmin.from("subscriptions").insert(row);
+      }
+
+      return res.status(200).json({
+        status: sub.status,
+        current_period_end: row.current_period_end,
+        cancel_at_period_end: row.cancel_at_period_end,
+      });
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  // ---- Authenticated AI assistant (requires a valid Supabase session; bounded input) ----
 
   app.post("/api/gemini/assistant", async (req, res) => {
     try {
+      await requireUser(req);
       const ai = getAiClient();
-      const { mode, text, history } = req.body;
+      const body = await readJsonBody(req);
+      const mode = body?.mode === "parse" ? "parse" : "chat";
+      const text = cleanText(body?.text);
+      if (!text) return res.status(400).json({ success: false, error: "Vraag ontbreekt" });
 
       if (mode === "parse") {
-        // AI Smart Start: Parse parking description into structured fields
         const systemInstruction = `
           You are an expert parking parsing engine for the "Shop & Go Kortrijk" application.
           Your task is to parse a user's free-form description of where they are parked in Kortrijk and extract structured data.
@@ -326,12 +375,12 @@ app.post("/api/check-subscription", async (req, res) => {
           3. Extract 'matchedCarDescription': e.g., "rode Golf", "zilveren BMW", if described. If not mentioned, return null.
           4. Extract 'matchedPlate': any license plate sequence (like "1-ABC-123" or similar Belgian plates) if mentioned. If not, return null.
           5. Write a friendly, polite explanation in Dutch. Advise that Shop&Go has 30 minutes of free parking and a sensor is tracking them. Offer to start their timer.
-          
+
           You must respond in strict JSON format matching the schema requested.
         `;
 
         const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: process.env.GEMINI_MODEL || "gemini-3.5-flash",
           contents: `User description: "${text}"`,
           config: {
             systemInstruction,
@@ -350,62 +399,63 @@ app.post("/api/check-subscription", async (req, res) => {
           }
         });
 
-        const parsedResult = JSON.parse(response.text || "{}");
-        res.json({ success: true, data: parsedResult });
-
-      } else {
-        // Chatbot Mode: Friendly Q&A about Shop & Go rules & advice
-        const systemInstruction = `
-          Je bent de vriendelijke "AI Parkeerassistent" voor de "Shop & Go Kortrijk" mobiele app.
-          Je helpt automobilisten in Kortrijk met alle vragen rond de Shop & Go parkeerplaatsen.
-
-          Belangrijke feiten over Shop & Go in Kortrijk die je MOET gebruiken:
-          - Maximum parkeertijd: Precies 30 minuten.
-          - Tarief: 100% gratis! Er is geen ticket of blauwe parkeerschijf nodig.
-          - Actieve uren: Maandag t.m. zaterdag van 9:00 tot 19:00 uur. Buiten deze uren, op zondag en op feestdagen is het parkeren vrij en onbeperkt.
-          - Hoe het werkt: Een draadloze sensor (magnetometer) in het wegdek detecteert wanneer je auto aankomt. Een timer telt 30 minuten af.
-          - Boete (Retributie): Bij overschrijding van de 30 minuten stuurt de sensor automatisch een melding naar de Parko parkeerwachters. Zij schrijven een retributie (boete) uit van €30 per halve dag.
-          - Minder mobielen: Een blauwe kaart voor mindervalligen geeft GEEN uitzondering op de 30 minuten limiet op Shop&Go sensorgebonden plekken in Kortrijk. Dit is om een hoge rotatie voor iedereen te garanderen.
-          - Doel: Hoge rotatie van parkeerplaatsen bevorderen zodat klanten snel een lokale winkel, apotheek, bakkerij of bank kunnen bezoeken. Dit helpt de Kortrijkse handelaars!
-
-          Lijst van Shop & Go locaties in Kortrijk ter referentie:
-          ${JSON.stringify(SHOPGO_SPOTS.map(s => `${s.name} (${s.street}, max ${s.bays} plaatsen)`).join(", "))}
-
-          Richtlijnen voor je antwoorden:
-          - Wees behulpzaam, positief en professioneel.
-          - Antwoord ALTIJD in het Nederlands.
-          - Houd je antwoorden kort, bondig en geoptimaliseerd voor een mobiel scherm (geen enorme lappen tekst, gebruik waar nodig bullet points).
-          - Als de gebruiker vraagt waar hij kan parkeren, geef dan concrete suggesties uit de lijst van locaties.
-        `;
-
-        // Format history for Gemini chat if present, otherwise do a simple call
-        let contents: any[] = [];
-        if (history && Array.isArray(history)) {
-          contents = history.map((h: any) => ({
-            role: h.role === "assistant" ? "model" : "user",
-            parts: [{ text: h.content }]
-          }));
-        }
-        contents.push({ role: "user", parts: [{ text }] });
-
-        const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents,
-          config: {
-            systemInstruction
-          }
-        });
-
-        res.json({ success: true, text: response.text });
+        res.setHeader("Cache-Control", "no-store");
+        return res.json({ success: true, data: JSON.parse(response.text || "{}") });
       }
-    } catch (error: any) {
-      console.error("Gemini API Error:", error);
-      res.status(500).json({ success: false, error: error.message || "Interne serverfout" });
+
+      const systemInstruction = `
+        Je bent de vriendelijke "AI Parkeerassistent" voor de "Shop & Go Kortrijk" mobiele app.
+        Je helpt automobilisten in Kortrijk met alle vragen rond de Shop & Go parkeerplaatsen.
+
+        Belangrijke feiten over Shop & Go in Kortrijk die je MOET gebruiken:
+        - Maximum parkeertijd: Precies 30 minuten.
+        - Tarief: 100% gratis! Er is geen ticket of blauwe parkeerschijf nodig.
+        - Actieve uren: Maandag t.m. zaterdag van 9:00 tot 19:00 uur. Buiten deze uren, op zondag en op feestdagen is het parkeren vrij en onbeperkt.
+        - Hoe het werkt: Een draadloze sensor (magnetometer) in het wegdek detecteert wanneer je auto aankomt. Een timer telt 30 minuten af.
+        - Boete (Retributie): Bij overschrijding van de 30 minuten stuurt de sensor automatisch een melding naar de Parko parkeerwachters. Zij schrijven een retributie (boete) uit van €30 per halve dag.
+        - Minder mobielen: Een blauwe kaart voor mindervalligen geeft GEEN uitzondering op de 30 minuten limiet op Shop&Go sensorgebonden plekken in Kortrijk. Dit is om een hoge rotatie voor iedereen te garanderen.
+        - Doel: Hoge rotatie van parkeerplaatsen bevorderen zodat klanten snel een lokale winkel, apotheek, bakkerij of bank kunnen bezoeken. Dit helpt de Kortrijkse handelaars!
+
+        Lijst van Shop & Go locaties in Kortrijk ter referentie:
+        ${JSON.stringify(SHOPGO_SPOTS.map(s => `${s.name} (${s.street}, max ${s.bays} plaatsen)`).join(", "))}
+
+        Richtlijnen voor je antwoorden:
+        - Wees behulpzaam, positief en professioneel.
+        - Antwoord ALTIJD in het Nederlands.
+        - Houd je antwoorden kort, bondig en geoptimaliseerd voor een mobiel scherm (geen enorme lappen tekst, gebruik waar nodig bullet points).
+        - Als de gebruiker vraagt waar hij kan parkeren, geef dan concrete suggesties uit de lijst van locaties.
+      `;
+
+      const history = Array.isArray(body?.history) ? body.history.slice(-10) : [];
+      const contents = history
+        .map((h: any) => ({
+          role: h?.role === "assistant" ? "model" : "user",
+          parts: [{ text: cleanText(h?.content, 900) }],
+        }))
+        .filter((item: any) => item.parts[0].text.length > 0);
+      contents.push({ role: "user", parts: [{ text }] });
+
+      const response = await ai.models.generateContent({
+        model: process.env.GEMINI_MODEL || "gemini-3.5-flash",
+        contents,
+        config: { systemInstruction },
+      });
+
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ success: true, text: response.text });
+    } catch (error) {
+      const e = error as any;
+      const status = Number(e?.statusCode || 500);
+      if (status >= 500) console.error("Gemini API Error:", e);
+      const publicMessage = status >= 500 ? "Interne serverfout" : String(e?.message || "Request failed");
+      return res.status(status).json({ success: false, error: publicMessage });
     }
   });
 
-  // Vite middleware setup
-  if (process.env.NODE_ENV !== "production") {
+  // ---- Frontend: Vite middleware in dev, static build in production ----
+  if (!IS_PRODUCTION) {
+    // Import Vite lazily so production runtimes never need the dev toolchain.
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -414,13 +464,13 @@ app.post("/api/check-subscription", async (req, res) => {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*all", (req, res) => {
+    app.get("*all", (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on http://0.0.0.0:${PORT} (${IS_PRODUCTION ? "production" : "development"})`);
   });
 }
 
