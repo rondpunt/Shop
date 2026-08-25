@@ -79,7 +79,11 @@ const CSP_DIRECTIVES = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: blob: https://maps.googleapis.com https://maps.gstatic.com https://*.googleapis.com https://*.ggpht.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://*.googleapis.com https://api.stripe.com https://r.stripe.com",
+  // In development the app may talk to a local Supabase stack (npx supabase start) on
+  // 127.0.0.1:54321 over http/ws. Those local origins are added only when NODE_ENV !== production.
+  `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://maps.googleapis.com https://*.googleapis.com https://api.stripe.com https://r.stripe.com${
+    IS_PRODUCTION ? "" : " http://127.0.0.1:54321 http://localhost:54321 ws://127.0.0.1:54321 ws://localhost:54321"
+  }`,
   "frame-src https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
@@ -109,6 +113,48 @@ async function startServer() {
   const app = express();
   app.disable("x-powered-by");
   app.use(applySecurityHeaders);
+
+  // Dev-only same-origin proxy to a local Supabase stack. Opt-in via DEV_SUPABASE_PROXY_TARGET
+  // (e.g. http://127.0.0.1:54321) and only active outside production. It lets the browser reach
+  // Supabase through the app origin (VITE_SUPABASE_URL=http://localhost:3000/sb), avoiding
+  // cross-origin/mixed-content/CSP issues during local development. Inert in production.
+  const devSupabaseTarget = process.env.DEV_SUPABASE_PROXY_TARGET;
+  if (!IS_PRODUCTION && devSupabaseTarget) {
+    const target = devSupabaseTarget.replace(/\/$/, "");
+    // Registered before express.json so the raw upstream body is preserved.
+    app.use("/sb", async (req, res) => {
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const rawBody = chunks.length ? Buffer.concat(chunks) : undefined;
+        const upstreamUrl = target + req.originalUrl.replace(/^\/sb/, "");
+        const headers: Record<string, string> = {};
+        for (const [k, v] of Object.entries(req.headers)) {
+          if (typeof v === "string" && !["host", "content-length", "connection"].includes(k.toLowerCase())) {
+            headers[k] = v;
+          }
+        }
+        const method = req.method.toUpperCase();
+        const upstream = await fetch(upstreamUrl, {
+          method,
+          headers,
+          body: method === "GET" || method === "HEAD" ? undefined : rawBody,
+          redirect: "manual",
+        });
+        res.status(upstream.status);
+        upstream.headers.forEach((value, key) => {
+          if (!["content-encoding", "transfer-encoding", "content-length"].includes(key.toLowerCase())) {
+            res.setHeader(key, value);
+          }
+        });
+        res.send(Buffer.from(await upstream.arrayBuffer()));
+      } catch (err) {
+        console.error("Supabase dev proxy error:", err);
+        res.status(502).json({ error: "Supabase proxy error" });
+      }
+    });
+  }
+
   // Cap request bodies to blunt trivial memory-exhaustion attempts.
   app.use(express.json({ limit: "100kb" }));
 
