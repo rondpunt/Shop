@@ -5,7 +5,7 @@ import { loadGoogleMaps } from "@/lib/googleMaps";
 import type { ParkoZone } from "@/hooks/useParkoLive";
 import { cn } from "@/lib/utils";
 
-type Filter = "free" | "all";
+type Filter = "free";
 
 type Props = {
   userCoords: { lat: number; lng: number } | null;
@@ -17,7 +17,7 @@ type Props = {
   height?: number | string;
   /** Show built-in filter chips (default true). */
   showFilters?: boolean;
-  /** Initial filter state. */
+  /** Kept for API compatibility; the sensor-first map always shows free places. */
   initialFilter?: Filter;
   /** Extra lower map padding reserved for the visible bottom sheet. */
   bottomPadding?: number;
@@ -104,7 +104,7 @@ export const NearbyMap = ({
   const userMarker = useRef<google.maps.Marker | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>(initialFilter);
+  const [filter] = useState<Filter>(initialFilter);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,7 +162,7 @@ export const NearbyMap = ({
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
 
-    const visible = zones.filter((z) => (filter === "free" ? z.freeBays > 0 : true));
+    const visible = zones.filter((z) => z.freeBays > 0);
 
     for (const z of visible) {
       const selected = z.id === recommendedZoneId;
@@ -261,10 +261,7 @@ export const NearbyMap = ({
 
       {showFilters && !loading && !error && (
         <div className="absolute left-3 top-3 z-[1] flex gap-1 rounded-full bg-card/95 p-1 shadow-elevated backdrop-blur">
-          {([
-            { id: "free", label: "Vrij" },
-            { id: "all", label: "Alle" },
-          ] as { id: Filter; label: string }[]).map((f) => (
+          {([{ id: "free", label: "Vrije plaatsen" }] as { id: Filter; label: string }[]).map((f) => (
             <button
               key={f.id}
               type="button"

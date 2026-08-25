@@ -62,6 +62,7 @@ const Home = () => {
   const sortedZones = useMemo<ZoneWithDistance[]>(() => {
     if (!parko?.zones) return [];
     return parko.zones
+      .filter((z) => z.freeBays > 0)
       .map((z) => ({ z, d: coords ? distKm(coords, z) : null }))
       .sort((a, b) => {
         const aFree = a.z.freeBays > 0;
@@ -174,8 +175,8 @@ const Home = () => {
           recommendedZoneId={selected?.z.id ?? null}
           onZoneTap={selectZone}
           height="100%"
-          showFilters={false}
-          initialFilter="all"
+           showFilters
+           initialFilter="free"
           bottomPadding={mapBottomPadding}
         />
       </div>
@@ -252,8 +253,8 @@ const Home = () => {
           <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
             <h2 className="min-w-0 truncate text-[20px] font-bold leading-tight text-foreground">
               {freeLocationCount === 0 && !parkoLoading && parko
-                ? "Geen vrije Shop&Go"
-                : "Vrije Shop&Go"}
+                ? "Geen vrije plaatsen"
+                : "Vrije plaatsen"}
             </h2>
             {sheetState > 0 && parko && !parkoLoading && !parkoError && (
               <span className="shrink-0 text-[11px] font-bold text-success">{liveLabel}</span>

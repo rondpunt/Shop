@@ -68,7 +68,7 @@ export const AppHeader = ({ floating = false }: { floating?: boolean }) => {
               <span className="text-[12px] font-semibold text-white/60">Kortrijk</span>
             </div>
             <div className="mt-px text-[9px] font-black uppercase tracking-[0.2em] text-primary drop-shadow-[0_0_8px_hsl(var(--primary)/0.6)]">
-              30 min · gratis
+              LIVE SENSORDATA
             </div>
           </div>
         </Link>

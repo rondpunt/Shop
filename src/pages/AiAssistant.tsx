@@ -47,10 +47,10 @@ const getAiHeaders = async () => {
 };
 
 const CHAT_PRESETS = [
-  { text: "Hoe lang mag ik gratis parkeren?", label: "Parkeertijd" },
-  { text: "Wat is de boete bij overschrijding?", label: "Boetes" },
-  { text: "Werkt de blauwe kaart hier?", label: "Minder Mobielen" },
-  { text: "Hoe weten de parkeerwachters dat ik er sta?", label: "Sensoren" }
+  { text: "Hoe werkt live sensordata?", label: "Sensoren" },
+  { text: "Waar zijn vrije plaatsen?", label: "Vrije plaatsen" },
+  { text: "Hoe navigeer ik naar een locatie?", label: "Navigatie" },
+  { text: "Hoe werkt mijn timer?", label: "Mijn timer" }
 ];
 
 export default function AiAssistant() {
@@ -158,7 +158,7 @@ export default function AiAssistant() {
       }
 
       toast.success("Timer succesvol gestart!", {
-        description: `Je 30 minuten gratis parkeren op de ${streetName} loopt.`
+        description: `Je timer voor ${streetName} loopt.`
       });
 
       // Clear the inputs
@@ -319,7 +319,7 @@ export default function AiAssistant() {
                 disabled={!!activeSession}
                 className="btn-pill-primary w-full py-2.5 text-sm font-bold shadow-glow-mint flex items-center justify-center gap-2"
               >
-                <Clock className="h-4 w-4" /> Start gratis 30 min timer op {parseResult.matchedStreet}!
+                <Clock className="h-4 w-4" /> Start 30 min timer op {parseResult.matchedStreet}!
               </button>
             ) : (
               <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive font-semibold">
@@ -446,23 +446,11 @@ export default function AiAssistant() {
           <div className="rounded-xl border border-border bg-card p-3.5 shadow-soft">
             <h3 className="text-xs font-extrabold text-slate-900 mb-1 flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-primary" />
-              Wat gebeurt er bij overschrijding van de 30 minuten?
-            </h3>
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              Als je wagen langer dan 30 minuten geparkeerd blijft staan tussen 9:00 en 19:00 (maandag t/m zaterdag), stuurt het Parko-systeem automatisch een digitale notificatie naar de dichtstbijzijnde gemeentelijke parkeerwachter. 
-              Zij schrijven dan een administratieve retributie (boete) van <strong>€30 per halve dag</strong> uit. Onze app helpt je dit te voorkomen door je tijdig te waarschuwen!
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-3.5 shadow-soft">
-            <h3 className="text-xs font-extrabold text-slate-900 mb-1 flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-primary" />
               Zijn er uitzonderingen voor minder mobielen?
             </h3>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-              <strong>Nee.</strong> In de stad Kortrijk geldt de blauwe parkeerkaart voor minder mobielen NIET als uitzondering op de Shop & Go plaatsen. 
-              Dit is besloten om de cruciale rotatie van deze specifieke, snel-boodschappen vakken te waarborgen. 
-              Minder mobielen kunnen wel onbeperkt gratis parkeren op alle andere reguliere en voorbehouden parkeerplaatsen in de stad.
+              Raadpleeg voor regels en uitzonderingen altijd de officiële borden ter plaatse. Deze app toont
+              uitsluitend live sensordata en kan geen lokale verkeersregels vervangen.
             </p>
           </div>
         </div>

@@ -61,7 +61,7 @@ export default async function handler(req: any, res: any) {
       model: process.env.GEMINI_MODEL || "gemini-3.5-flash",
       contents,
       config: {
-        systemInstruction: `Je bent de beknopte AI-parkeerassistent van Shop&Go Kortrijk. Antwoord in Belgisch Nederlands. Leg uit dat Shop&Go maximaal 30 minuten gratis is tijdens de geldende uren en dat officiële borden/regels ter plaatse altijd voorrang hebben. Gebruik nooit verzonnen live parkeerdata; de app toont officiële Parko-sensordata apart. Houd antwoorden mobiel en praktisch.`,
+        systemInstruction: `Je bent de beknopte AI-assistent van Shop&Go Kortrijk. Antwoord in Belgisch Nederlands. Leg uit dat de app officiële Parko-sensordata toont en dat beschikbaarheid kan wijzigen. Gebruik nooit verzonnen live parkeerdata; verwijs voor lokale regels naar de officiële borden ter plaatse. Houd antwoorden mobiel en praktisch.`,
       },
     });
     res.setHeader("Cache-Control", "no-store");
