@@ -10,7 +10,6 @@ import { ensureNotificationPermission, scheduleSessionAlarms } from "@/lib/notif
 import { StartTimerSheet } from "@/components/StartTimerSheet";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { ZoneIntelligence } from "@/components/ZoneIntelligence";
 
 const LocationDetail = () => {
   const { id = "" } = useParams();
@@ -176,12 +175,6 @@ const LocationDetail = () => {
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
           Parkeer je hier? Tijdens je sessie kun je zelf een foto van de parkeerplek toevoegen aan je historiek.
         </p>
-
-        <ZoneIntelligence
-          spotId={`parko:${zone.id}`}
-          freeBays={zone.freeBays}
-          totalBays={zone.totalBays}
-        />
 
         {d !== null && (
           <div className="mt-3 rounded-xl bg-muted px-4 py-3">
