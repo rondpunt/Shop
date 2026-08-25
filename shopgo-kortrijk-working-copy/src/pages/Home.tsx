@@ -63,6 +63,7 @@ const Home = () => {
   const sortedZones = useMemo<ZoneWithDistance[]>(() => {
     if (!parko?.zones) return [];
     return parko.zones
+      .filter((z) => z.freeBays > 0)
       .map((z) => ({ z, d: coords ? distKm(coords, z) : null }))
       .sort((a, b) => {
         const aFree = a.z.freeBays > 0;
@@ -176,8 +177,8 @@ const Home = () => {
           recommendedZoneId={selected?.z.id ?? null}
           onZoneTap={selectZone}
           height="100%"
-          showFilters={false}
-          initialFilter="all"
+           showFilters
+           initialFilter="free"
           bottomPadding={mapBottomPadding}
         />
       </div>
@@ -254,8 +255,8 @@ const Home = () => {
           <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
             <h2 className="min-w-0 truncate text-[20px] font-bold leading-tight text-foreground">
               {freeLocationCount === 0 && !parkoLoading && parko
-                ? "Geen vrije Shop&Go"
-                : "Vrije Shop&Go"}
+                ? "Geen vrije plaatsen"
+                : "Vrije plaatsen"}
             </h2>
             {sheetState > 0 && parko && !parkoLoading && !parkoError && (
               <span className="live-badge shrink-0 text-[11px] font-bold text-success">{liveLabel}</span>
@@ -331,6 +332,14 @@ const Home = () => {
                           <span className="pulse-dot h-2.5 w-2.5 shrink-0 rounded-full bg-success" />
                         <span className="text-foreground">{availabilityText(selected.z)}</span>
                       </div>
+                       <div className="mt-2 text-[11px] font-semibold text-success">
+                         Live sensordata · laatst bijgewerkt {parko?.fetchedAt
+                           ? new Date(parko.fetchedAt).toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" })
+                           : "—"}
+                       </div>
+                       <div className="mt-1 text-[11px] text-muted-foreground">
+                         Beschikbaarheid kan wijzigen.
+                       </div>
 
                       {selected.d !== null && (
                         <div className="mt-1 text-[13px] font-medium text-muted-foreground">

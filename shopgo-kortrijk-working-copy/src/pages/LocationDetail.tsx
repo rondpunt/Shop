@@ -154,10 +154,13 @@ const LocationDetail = () => {
           />
         </div>
 
-        <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-success">
+         <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-success">
           <span className="dot-neon h-2.5 w-2.5 rounded-full pulse-dot" />
-          Live · bijgewerkt {new Date(parko.fetchedAt).toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" })}
+           Sensor actief · laatst bijgewerkt {new Date(parko.fetchedAt).toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" })}
         </div>
+         <p className="mt-2 text-[11px] text-muted-foreground">
+           Live sensordata · beschikbaarheid kan wijzigen.
+         </p>
 
         <div className="mt-4 flex items-center gap-3 rounded-2xl bg-muted/55 px-4 py-3 ring-1 ring-border/50">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/12 text-primary">
@@ -220,9 +223,6 @@ const LocationDetail = () => {
           <Heart className={cn("h-4 w-4", fav && "fill-primary")} /> {fav ? "Favoriet" : "Sla op als favoriet"}
         </button>
 
-        <p className="mt-3 text-center text-[11px] text-muted-foreground">
-          Shop&Go zone · Gratis · Max 30 min
-        </p>
       </div>
 
       <StartTimerSheet

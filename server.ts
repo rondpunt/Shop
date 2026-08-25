@@ -333,7 +333,7 @@ app.post("/api/check-subscription", async (req, res) => {
           2. Extract 'matchedZoneId': the exact ID from the locations list above that best matches the described parking location. If no match is close, return null.
           3. Extract 'matchedCarDescription': e.g., "rode Golf", "zilveren BMW", if described. If not mentioned, return null.
           4. Extract 'matchedPlate': any license plate sequence (like "1-ABC-123" or similar Belgian plates) if mentioned. If not, return null.
-          5. Write a friendly, polite explanation in Dutch. Advise that Shop&Go has 30 minutes of free parking and a sensor is tracking them. Offer to start their timer.
+          5. Write a friendly, polite explanation in Dutch. Confirm the matched location and explain that official Parko sensors report availability. Offer to start the user's reminder timer.
           
           You must respond in strict JSON format matching the schema requested.
         `;

@@ -6,8 +6,6 @@ import { useParkoLive, type ParkoZone } from "@/hooks/useParkoLive";
 import { NearbyMap } from "@/components/NearbyMap";
 import { distKm, driveMin, formatDist, walkMin, zoneStatus } from "@/lib/parko";
 import { cn } from "@/lib/utils";
-import { getPredictiveAvailability, getPredictionLabel } from "@/lib/predictive";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 const Zones = () => {
   const navigate = useNavigate();
@@ -93,7 +91,7 @@ const Zones = () => {
           zones={zones}
           onZoneTap={(z) => navigate(`/locatie/${encodeURIComponent(z.id)}`)}
           height={260}
-          initialFilter="all"
+          initialFilter="free"
         />
       </div>
 
@@ -113,7 +111,7 @@ const Zones = () => {
 
       {/* Sort + count */}
       <div className="mt-4 flex items-center justify-between">
-        <span className="text-[13px] font-bold text-white">Alle locaties ({filtered.length})</span>
+        <span className="text-[13px] font-bold text-white">Vrije locaties ({filtered.length})</span>
         <button
           type="button"
           onClick={() => setSortBy((s) => (s === "distance" ? "free" : "distance"))}
@@ -126,7 +124,7 @@ const Zones = () => {
       {/* List */}
       <ul className="mt-3 space-y-2">
         {filtered.map(({ z, d }, idx) => (
-          <ZoneRow key={`${z.id}-${idx}`} z={z} d={d} onClick={() => navigate(`/locatie/${encodeURIComponent(z.id)}`)} />
+          <ZoneRow key={`${z.id}-${idx}`} z={z} d={d} updatedAt={data?.fetchedAt} onClick={() => navigate(`/locatie/${encodeURIComponent(z.id)}`)} />
         ))}
         {filtered.length === 0 && !loading && (
           <li className="card-soft p-6 text-center text-sm text-muted-foreground">
@@ -141,10 +139,12 @@ const Zones = () => {
 const ZoneRow = ({
   z,
   d,
+  updatedAt,
   onClick,
 }: {
   z: ParkoZone;
   d: number | null;
+  updatedAt?: string;
   onClick: () => void;
 }) => {
   const status = zoneStatus(z);
@@ -154,10 +154,6 @@ const ZoneRow = ({
     status === "unknown" ? "ONBEKEND" : status === "full" ? "VOL" : `${z.freeBays} VRIJ`;
   const numColor =
     status === "free" ? "bg-success" : status === "warn" ? "bg-warning" : status === "full" ? "bg-destructive" : "bg-muted-foreground/40";
-
-  const currentHour = new Date().getHours();
-  const prediction = getPredictiveAvailability(z.name, z.totalBays, currentHour);
-  const predictionLabel = getPredictionLabel(prediction);
 
   return (
     <li>
@@ -173,7 +169,12 @@ const ZoneRow = ({
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[14px] font-bold">{z.name}</span>
             <span className="block text-[11px] text-muted-foreground">
-              {z.totalBays} plaatsen{d !== null && ` · 📍 ${formatDist(d)}`}
+              {z.freeBays} vrije plaatsen · live sensordata{d !== null && ` · ${formatDist(d)}`}
+            </span>
+            <span className="mt-0.5 block text-[11px] font-medium text-muted-foreground">
+              Laatst bijgewerkt {updatedAt
+                ? new Date(updatedAt).toLocaleTimeString("nl-BE", { hour: "2-digit", minute: "2-digit" })
+                : "—"}
             </span>
             {d !== null && (
               <>
@@ -187,20 +188,6 @@ const ZoneRow = ({
             )}
           </span>
           <span className={cn("pill", badgeClass)}>{badgeText}</span>
-        </div>
-        
-        {/* Prediction Bar */}
-        <div className="w-full bg-black/20 px-3 py-1.5 flex items-center gap-2 border-t border-white/5">
-          {prediction === "high" ? (
-            <TrendingUp className="h-3 w-3 text-success" />
-          ) : prediction === "medium" ? (
-            <Minus className="h-3 w-3 text-warning" />
-          ) : (
-            <TrendingDown className="h-3 w-3 text-destructive" />
-          )}
-          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-            Historische voorspelling ({currentHour}:00): <strong className={prediction === "high" ? "text-success" : prediction === "medium" ? "text-warning" : "text-destructive"}>{predictionLabel}</strong>
-          </span>
         </div>
       </button>
     </li>

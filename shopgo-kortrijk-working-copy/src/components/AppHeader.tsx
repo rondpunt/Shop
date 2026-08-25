@@ -70,7 +70,7 @@ export const AppHeader = ({ floating = false }: { floating?: boolean }) => {
             <span className="text-[15px] font-black tracking-[-0.02em]">Shop&amp;Go</span>
             <span className="hidden text-[11px] font-semibold text-white/65 min-[360px]:inline">Kortrijk</span>
             <span className="hidden rounded-full bg-primary/15 px-2 py-1 text-[8px] font-black uppercase tracking-[0.12em] text-primary ring-1 ring-primary/20 min-[430px]:inline-flex">
-              30 min gratis
+              LIVE SENSORDATA
             </span>
           </div>
         </Link>

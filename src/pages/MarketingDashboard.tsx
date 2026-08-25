@@ -117,7 +117,7 @@ export const MarketingDashboard = () => {
         <div className="mt-4 p-3 rounded-lg bg-secondary/20 border border-border/40">
           <div className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Actieve Tekst Preview:</div>
           <p className="text-sm font-semibold text-foreground italic">
-            {activeVariant === "standard" && "“Shop&Go Kortrijk — 30 min gratis parkeer-reminder”"}
+            {activeVariant === "standard" && "“Shop&Go Kortrijk — live sensordata in Kortrijk”"}
             {activeVariant === "conversational" && "“Zorgeloos winkelen in Kortrijk. Wij houden de tijd voor je in de gaten.”"}
             {activeVariant === "urgent" && "“Laatste waarschuwing! Voorkom een parkeerboete op Shop&Go plekken.”"}
           </p>

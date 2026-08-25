@@ -502,7 +502,7 @@ app.post("/api/check-subscription", async (req, res) => {
 
           Rules for extraction:
           1. Extract 'matchedCarDescription': e.g., "rode Golf", "zilveren BMW", if described. If not mentioned, return null.
-          2. Write a friendly, polite explanation in Dutch. Advise that Shop&Go has 30 minutes of free parking and a sensor is tracking them. Offer to start their timer.
+           2. Write a friendly, polite explanation in Dutch. Confirm the matched location and explain that official Parko sensors report availability. Offer to start the user's reminder timer.
           
           You must respond in strict JSON format matching the schema requested.
         `;
@@ -542,13 +542,9 @@ app.post("/api/check-subscription", async (req, res) => {
           Je helpt automobilisten in Kortrijk met alle vragen rond de Shop & Go parkeerplaatsen.
 
           Belangrijke feiten over Shop & Go in Kortrijk die je MOET gebruiken:
-          - Maximum parkeertijd: Precies 30 minuten.
-          - Tarief: 100% gratis! Er is geen ticket of blauwe parkeerschijf nodig.
-          - Actieve uren: Maandag t.m. zaterdag van 9:00 tot 19:00 uur. Buiten deze uren, op zondag en op feestdagen is het parkeren vrij en onbeperkt.
-          - Hoe het werkt: Een draadloze sensor (magnetometer) in het wegdek detecteert wanneer je auto aankomt. Een timer telt 30 minuten af.
-          - Boete (Retributie): Bij overschrijding van de 30 minuten stuurt de sensor automatisch een melding naar de Parko parkeerwachters. Zij schrijven een retributie (boete) uit van €30 per halve dag.
-          - Minder mobielen: Een blauwe kaart voor mindervalligen geeft GEEN uitzondering op de 30 minuten limiet op Shop&Go sensorgebonden plekken in Kortrijk. Dit is om een hoge rotatie voor iedereen te garanderen.
-          - Doel: Hoge rotatie van parkeerplaatsen bevorderen zodat klanten snel een lokale winkel, apotheek, bakkerij of bank kunnen bezoeken. Dit helpt de Kortrijkse handelaars!
+           - De app toont officiële Parko-sensordata over vrije plaatsen.
+           - Sensoren in het wegdek rapporteren bezette en vrije plaatsen; beschikbaarheid kan wijzigen.
+           - Gebruik uitsluitend de actuele sensordata in de app en verwijs voor lokale regels naar officiële borden ter plaatse.
 
           Lijst van Shop & Go locaties in Kortrijk ter referentie:
           ${JSON.stringify(SHOPGO_SPOTS.map(s => `${s.name} (${s.street}, max ${s.bays} plaatsen)`).join(", "))}

@@ -5,7 +5,7 @@ import { loadGoogleMaps } from "@/lib/googleMaps";
 import type { ParkoZone } from "@/hooks/useParkoLive";
 import { cn } from "@/lib/utils";
 
-type Filter = "free" | "all";
+type Filter = "free";
 
 type Props = {
   userCoords: { lat: number; lng: number } | null;
@@ -17,7 +17,7 @@ type Props = {
   height?: number | string;
   /** Show built-in filter chips (default true). */
   showFilters?: boolean;
-  /** Initial filter state. */
+  /** Kept for API compatibility; the sensor-first map always shows free places. */
   initialFilter?: Filter;
   /** Extra lower map padding reserved for the visible bottom sheet. */
   bottomPadding?: number;
@@ -69,7 +69,7 @@ const buildPinIcon = (z: ParkoZone, selected: boolean) => {
   const s = statusFor(z);
   const color = colorFor(s);
   const label = s === "unknown" ? "?" : String(z.freeBays);
-  const size = selected ? 54 : 48;
+  const size = selected ? 46 : 40;
   const fontSize = z.freeBays >= 100 ? 13 : z.freeBays >= 10 ? 16 : 19;
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${Math.round(size * 1.25)}" viewBox="0 0 48 60">
@@ -122,13 +122,16 @@ const FallbackMap = ({
 }: Props) => {
   const [filter, setFilter] = useState<Filter>(initialFilter);
   const [zoom, setZoom] = useState(1);
-  const visibleZones = zones.filter((zone) => filter === "all" || zone.freeBays > 0);
+  const visibleZones = zones
+    .filter((zone) => zone.freeBays > 0)
+    .sort((a, b) => b.freeBays - a.freeBays)
+    .slice(0, 12);
   const visibleClusters = useMemo<ZoneCluster[]>(() => {
     const cells = new Map<string, ParkoZone[]>();
     // A small number of meaningful clusters reads like a real parking overview,
     // rather than a dense field of competing counters on phone screens.
-    const columns = 7;
-    const rows = 8;
+    const columns = 5;
+    const rows = 6;
     for (const zone of visibleZones) {
       const col = Math.max(0, Math.min(columns - 1, Math.floor(((zone.lng - FALLBACK_BOUNDS.minLng) / (FALLBACK_BOUNDS.maxLng - FALLBACK_BOUNDS.minLng)) * columns)));
       const row = Math.max(0, Math.min(rows - 1, Math.floor(((zone.lat - FALLBACK_BOUNDS.minLat) / (FALLBACK_BOUNDS.maxLat - FALLBACK_BOUNDS.minLat)) * rows)));
@@ -190,12 +193,12 @@ const FallbackMap = ({
                 title={description}
                 onClick={() => onZoneTap?.(cluster.primaryZone)}
                 className={cn(
-                  "flex min-h-8 min-w-8 -translate-x-1/2 -translate-y-full items-center justify-center rounded-full border-2 border-white px-2 py-1 text-[10px] font-black tabular-nums text-white shadow-[0_5px_12px_rgba(0,0,0,.32)] transition-transform hover:scale-110",
-                  cluster.selected && "scale-125 ring-2 ring-primary/70 ring-offset-2 ring-offset-[#101a2b]",
+                  "flex min-h-7 min-w-7 -translate-x-1/2 -translate-y-full items-center justify-center rounded-full border border-white/90 px-1.5 py-1 text-[10px] font-black tabular-nums text-white shadow-[0_4px_10px_rgba(0,0,0,.28)] transition-transform hover:scale-110",
+                  cluster.selected && "scale-115 ring-2 ring-primary/70 ring-offset-2 ring-offset-[#101a2b]",
                   isFull ? "bg-[#ff4757]" : cluster.freeBays <= 3 ? "bg-[#f59e0b]" : "bg-primary",
                 )}
               >
-                <span className="text-[17px] leading-none">
+                  <span className="text-[14px] leading-none">
                   {isFull ? "0" : cluster.freeBays}
                 </span>
               </button>
@@ -223,10 +226,7 @@ const FallbackMap = ({
         </div>
         {showFilters && (
           <div className="flex gap-1 rounded-full bg-card/95 p-1 shadow-elevated backdrop-blur">
-            {([
-              { id: "free", label: "Vrij" },
-              { id: "all", label: "Alle" },
-            ] as { id: Filter; label: string }[]).map((item) => (
+            {([{ id: "free", label: "Vrije plaatsen" }] as { id: Filter; label: string }[]).map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -351,7 +351,10 @@ export const NearbyMap = ({
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
 
-    const visible = zones.filter((z) => (filter === "free" ? z.freeBays > 0 : true));
+    const visible = zones
+      .filter((z) => z.freeBays > 0)
+      .sort((a, b) => b.freeBays - a.freeBays)
+      .slice(0, 12);
 
     for (const z of visible) {
       const selected = z.id === recommendedZoneId;
