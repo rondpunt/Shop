@@ -125,7 +125,7 @@ const FallbackMap = ({
   const visibleZones = zones
     .filter((zone) => zone.freeBays > 0)
     .sort((a, b) => b.freeBays - a.freeBays)
-    .slice(0, 12);
+    .slice(0, 6);
   const visibleClusters = useMemo<ZoneCluster[]>(() => {
     const cells = new Map<string, ParkoZone[]>();
     // A small number of meaningful clusters reads like a real parking overview,
@@ -354,7 +354,7 @@ export const NearbyMap = ({
     const visible = zones
       .filter((z) => z.freeBays > 0)
       .sort((a, b) => b.freeBays - a.freeBays)
-      .slice(0, 12);
+      .slice(0, 6);
 
     for (const z of visible) {
       const selected = z.id === recommendedZoneId;

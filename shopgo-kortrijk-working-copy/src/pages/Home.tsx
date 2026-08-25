@@ -255,12 +255,9 @@ const Home = () => {
           <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
             <h2 className="min-w-0 truncate text-[20px] font-bold leading-tight text-foreground">
               {freeLocationCount === 0 && !parkoLoading && parko
-                ? "Geen vrije plaatsen"
-                : "Vrije plaatsen"}
+                ? "Geen vrije Shop&Go"
+                : "Vrije Shop&Go"}
             </h2>
-            {sheetState > 0 && parko && !parkoLoading && !parkoError && (
-              <span className="live-badge shrink-0 text-[11px] font-bold text-success">{liveLabel}</span>
-            )}
           </div>
 
           {parkoLoading && !parko ? (
@@ -320,10 +317,6 @@ const Home = () => {
                 ) : selected ? (
                   <>
                     <div className="best-map-card motion-status-in w-full rounded-3xl p-4 text-left">
-                      {selected.z.id === bestChoice?.z.id && selected.z.freeBays > 0 && (
-                        <div className="mb-1.5 text-[11px] font-bold text-primary">Beste keuze nu</div>
-                      )}
-
                       <div className="text-[19px] font-bold leading-tight text-foreground">
                         {selected.z.name}
                       </div>
