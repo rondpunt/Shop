@@ -35,3 +35,7 @@ yarn-debug.log*
 yarn-error.log*
 .tmp/
 tmp/
+
+# Supabase CLI local state
+supabase/.branches
+supabase/.temp
