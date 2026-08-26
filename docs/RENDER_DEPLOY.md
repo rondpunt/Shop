@@ -38,7 +38,7 @@ Expected URL: `https://shopgo-kortrijk.onrender.com` (or the name Render assigns
 2. Copy secrets into a local file (never commit):
 
 ```bash
-cp .env.render.example .env.render
+cp env.render.example .env.render
 # edit .env.render — paste full Replit/Supabase/Stripe values
 ```
 
