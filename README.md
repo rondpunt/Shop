@@ -62,7 +62,8 @@ in Express that `vercel.json` applies on Vercel, so the security posture is iden
 - **Vercel** (static + serverless `api/`): the committed `vercel.json` builds with `build:pwa` and
   serves the hardened functions in `api/`. Set the environment variables above in the project.
 - **Render / any Node host** (single full-stack web service): use the committed `render.yaml`
-  Blueprint, or configure manually:
+  Blueprint on branch `cursor/setup-dev-environment-deee` (see `docs/RENDER_DEPLOY.md` or
+  `scripts/render-deploy.sh`), or configure manually:
   - Build: `npm ci --include=dev && npm run build:legacy`
   - Start: `npm run start:legacy`
   - Health check: `/api/shopgo-spots`
