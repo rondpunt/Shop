@@ -29,6 +29,10 @@ optional and only activate when their keys are present — the server fails clos
 Copy `.env.example` and fill in what you need. Public browser values use the `VITE_` prefix and are
 embedded in the client bundle; everything else is server‑only and must never use `VITE_`.
 
+If your secrets were exported from **Replit**, use `docs/REPLIT_ENV_MIGRATION.md` — this app does not
+use Clerk or `SESSION_SECRET`, and a Stripe `pk_live_…` value must not be pasted into
+`SUPABASE_SERVICE_ROLE_KEY`.
+
 | Variable | Scope | Purpose |
 | --- | --- | --- |
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID` | public | Supabase auth + cloud sync |
