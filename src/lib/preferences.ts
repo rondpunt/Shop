@@ -6,9 +6,9 @@ const KEY = "shopgo.prefs.v1";
 export type AlarmTone = "soft" | "classic" | "urgent";
 
 export type ReminderPrefs = {
-  // Minutes BEFORE the 30-min mark when the user wants to be alerted.
-  // E.g. 10 → user gets reminded 10 minutes before time runs out.
   remindBeforeMin: number;
+  /** Premium: extra waarschuwing (minuten vóór einde). null = uit. */
+  remindBeforeSecondaryMin: number | null;
   alarmTone: AlarmTone;
 };
 
@@ -22,6 +22,7 @@ export const REMINDER_OPTIONS = Array.from(
 
 const DEFAULTS: ReminderPrefs = {
   remindBeforeMin: 4,
+  remindBeforeSecondaryMin: null,
   alarmTone: "classic",
 };
 
@@ -37,8 +38,16 @@ const safeRead = (): ReminderPrefs => {
     if (parsed?.alarmTone === "soft" || parsed?.alarmTone === "classic" || parsed?.alarmTone === "urgent") {
       tone = parsed.alarmTone as AlarmTone;
     }
-    
-    return { remindBeforeMin: validMin, alarmTone: tone };
+
+    let secondary: number | null = null;
+    if (parsed?.remindBeforeSecondaryMin != null) {
+      const sec = Number(parsed.remindBeforeSecondaryMin);
+      if (Number.isFinite(sec) && sec >= REMINDER_MIN && sec <= REMINDER_MAX) {
+        secondary = Math.round(sec);
+      }
+    }
+
+    return { remindBeforeMin: validMin, remindBeforeSecondaryMin: secondary, alarmTone: tone };
   } catch {
     return DEFAULTS;
   }

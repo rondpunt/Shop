@@ -10,13 +10,16 @@ import { ensureNotificationPermission, scheduleSessionAlarms } from "@/lib/notif
 import { StartTimerSheet } from "@/components/StartTimerSheet";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { ZoneIntelligence } from "@/components/ZoneIntelligence";
+import { usePremium } from "@/hooks/usePremium";
+import { PremiumSoftPrompt } from "@/components/PremiumSoftPrompt";
+import { FREE_FAVORITES_LIMIT } from "@/lib/premiumLimits";
 
 const LocationDetail = () => {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { data: parko } = useParkoLive();
   const { isFavorite, toggle } = useFavorites();
+  const { premium } = usePremium();
   const { activeSession, startSession, cars } = useDataSource();
 
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -186,8 +189,18 @@ const LocationDetail = () => {
         <button
           type="button"
           onClick={() => {
-            const added = toggle({ id: zone.id, name: zone.name, lat: zone.lat, lng: zone.lng });
-            toast.success(added ? "Toegevoegd aan favorieten" : "Verwijderd uit favorieten");
+            const result = toggle(
+              { id: zone.id, name: zone.name, lat: zone.lat, lng: zone.lng },
+              { premium },
+            );
+            if (result.blocked) {
+              toast.info(`Gratis: max ${FREE_FAVORITES_LIMIT} favorieten`, {
+                description: "Upgrade naar Premium voor onbeperkt.",
+                action: { label: "Premium", onClick: () => navigate("/premium") },
+              });
+              return;
+            }
+            toast.success(result.added ? "Toegevoegd aan favorieten" : "Verwijderd uit favorieten");
           }}
           className={cn(
             "btn-pill-outline mt-2 w-full",

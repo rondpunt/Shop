@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { canAddFavorite } from "@/lib/premiumLimits";
 
 const KEY = "shopgo:favorites:v1";
 
@@ -52,15 +53,22 @@ export const useFavorites = () => {
     persist(read().filter((f) => f.id !== id));
   }, []);
 
-  const toggle = useCallback((spot: Omit<FavoriteSpot, "addedAt">) => {
-    const current = read();
-    if (current.some((f) => f.id === spot.id)) {
-      persist(current.filter((f) => f.id !== spot.id));
-      return false;
-    }
-    persist([{ ...spot, addedAt: new Date().toISOString() }, ...current]);
-    return true;
-  }, []);
+  const toggle = useCallback(
+    (spot: Omit<FavoriteSpot, "addedAt">, options?: { premium?: boolean }) => {
+      const current = read();
+      if (current.some((f) => f.id === spot.id)) {
+        persist(current.filter((f) => f.id !== spot.id));
+        return { added: false as const, blocked: false as const };
+      }
+      const premium = options?.premium ?? false;
+      if (!canAddFavorite(premium, current.length)) {
+        return { added: false as const, blocked: true as const };
+      }
+      persist([{ ...spot, addedAt: new Date().toISOString() }, ...current]);
+      return { added: true as const, blocked: false as const };
+    },
+    [],
+  );
 
   const isFavorite = useCallback(
     (id: string) => favorites.some((f) => f.id === id),

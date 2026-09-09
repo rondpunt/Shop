@@ -9,16 +9,31 @@ import { toast } from "sonner";
 import { tap, success, warning } from "@/lib/haptics";
 import { MarketingSuite } from "@/lib/marketing";
 import { Logger } from "@/lib/logger";
+import {
+  PREMIUM_PRICING,
+  PREMIUM_TAGLINE,
+  formatPlanPrice,
+  yearlySavingsPercent,
+  type PremiumPlan,
+} from "@/lib/pricing";
+import { hasStripeToken } from "@/lib/stripe";
 
-const features = [
-  "Volledige en langere parkeerhistoriek",
-  "Meerdere voertuigen en favorieten",
-  "Extra timerwaarschuwingen en live widget",
-  "PDF-export van je parkeerhistoriek",
-  "Premium community-inzichten wanneer beschikbaar",
+const freeTierFeatures = [
+  "1 voertuig + basisreminder",
+  "Tot 8 favorieten",
+  "60 dagen parkeerhistoriek",
+  "30 min timer — altijd gratis",
 ];
 
-type Plan = "monthly" | "yearly";
+const premiumFeatures = [
+  "Onbeperkte favorieten",
+  "Volledige historiek + PDF-export",
+  "Meerdere voertuigen",
+  "Dubbele & custom waarschuwingen",
+  "Live timer-widget (Android)",
+];
+
+type Plan = PremiumPlan;
 
 const Premium = () => {
   const navigate = useNavigate();
@@ -43,6 +58,7 @@ const Premium = () => {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [openingPortal, setOpeningPortal] = useState(false);
   const [trialBusy, setTrialBusy] = useState(false);
+  const savingsPct = yearlySavingsPercent();
 
   useEffect(() => {
     MarketingSuite.trackEvent("page_view", { page: "premium" });
@@ -157,7 +173,6 @@ const Premium = () => {
     <>
       <PaymentTestModeBanner />
       <div className="-mx-4 min-h-[calc(100dvh-9rem)] bg-background pb-8">
-        {/* Donkere header */}
         <header className="bg-deep px-5 pb-10 pt-6 text-white">
           <Link
             to="/instellingen"
@@ -172,8 +187,8 @@ const Premium = () => {
               Shop&Go Premium
             </h1>
           </div>
-          <p className="mt-3 text-[15px] font-medium text-white/70">
-            Meer overzicht, waarschuwingen en historiek
+          <p className="mt-3 text-[15px] font-medium leading-snug text-white/80">
+            {PREMIUM_TAGLINE}
           </p>
         </header>
 
@@ -192,9 +207,7 @@ const Premium = () => {
           )}
           {!paidActive && isTrial && (
             <div className="mb-4 rounded-2xl border border-primary/40 bg-primary/10 px-4 py-3">
-              <div className="text-sm font-bold text-primary">
-                Gratis proefperiode actief
-              </div>
+              <div className="text-sm font-bold text-primary">Gratis proefperiode actief</div>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Nog <strong>{daysLeft}</strong> {daysLeft === 1 ? "dag" : "dagen"}
                 {trialEndDate ? ` · vervalt op ${trialEndDate}` : ""}.
@@ -202,13 +215,28 @@ const Premium = () => {
             </div>
           )}
 
-          {/* Voordelenkaart */}
-          <section className="card-soft mb-5 overflow-hidden">
-            <h2 className="px-4 pb-1 pt-4 text-[12px] font-bold uppercase tracking-wider text-card-foreground">
-              Wat krijg je?
+          <section className="card-soft mb-4 overflow-hidden">
+            <h2 className="px-4 pb-1 pt-4 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+              Gratis
+            </h2>
+            <ul className="divide-y divide-border/40 pb-2">
+              {freeTierFeatures.map((f) => (
+                <li key={f} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+                    <Check className="h-3 w-3" strokeWidth={3} />
+                  </span>
+                  <span className="text-[14px] text-card-foreground">{f}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="card-soft mb-5 overflow-hidden ring-1 ring-primary/20">
+            <h2 className="px-4 pb-1 pt-4 text-[12px] font-bold uppercase tracking-wider text-primary">
+              Premium
             </h2>
             <ul className="divide-y divide-border/40">
-              {features.map((f) => (
+              {premiumFeatures.map((f) => (
                 <li key={f} className="flex items-center gap-3 px-4 py-3">
                   <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
                     <Check className="h-3.5 w-3.5" strokeWidth={3} />
@@ -219,7 +247,6 @@ const Premium = () => {
             </ul>
           </section>
 
-          {/* Prijsopties */}
           <h2 className="mb-2 px-1 text-[12px] font-bold uppercase tracking-wider text-foreground">
             Kies je abonnement
           </h2>
@@ -234,8 +261,8 @@ const Premium = () => {
                   : "bg-card text-card-foreground ring-1 ring-border/60"
               }`}
             >
-              <div className="font-display text-[22px]">€1,99</div>
-              <div className="text-xs font-medium text-card-muted">/ maand</div>
+              <div className="font-display text-[22px]">{PREMIUM_PRICING.monthly.label}</div>
+              <div className="text-xs font-medium text-card-muted">{PREMIUM_PRICING.monthly.suffix}</div>
             </button>
 
             <button
@@ -248,20 +275,25 @@ const Premium = () => {
                   : "bg-card text-card-foreground ring-1 ring-border/60"
               }`}
             >
-              <div className="font-display text-[22px]">€14,99</div>
+              <div className="font-display text-[22px]">{PREMIUM_PRICING.yearly.label}</div>
               <div className={`text-xs font-medium ${selectedPlan === "yearly" ? "text-white/90" : "text-card-muted"}`}>
-                / jaar
+                {PREMIUM_PRICING.yearly.suffix}
               </div>
               <div className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                 selectedPlan === "yearly" ? "bg-white/20 text-white" : "bg-primary/15 text-primary"
               }`}>
-                Bespaar 37%
+                Bespaar {savingsPct}%
               </div>
             </button>
           </div>
 
-          <p className="mb-5 px-1 text-[11px] text-muted-foreground">
+          <p className="mb-5 px-1 text-[11px] leading-relaxed text-muted-foreground">
             Veilig betalen. Op elk moment opzegbaar. Geen verborgen kosten.
+            {!hasStripeToken() && (
+              <span className="mt-1 block text-warning">
+                Checkout vereist VITE_PAYMENTS_CLIENT_TOKEN + STRIPE_SECRET_KEY (testmodus aanbevolen).
+              </span>
+            )}
           </p>
 
           {paidActive ? (
@@ -278,8 +310,8 @@ const Premium = () => {
               <button
                 type="button"
                 onClick={() => handleCheckout(selectedPlan)}
-                disabled={loadingPlan !== null}
-                className="btn-pill-primary w-full"
+                disabled={loadingPlan !== null || !hasStripeToken()}
+                className="btn-pill-primary w-full disabled:opacity-50"
               >
                 {loadingPlan ? <Loader2 className="h-5 w-5 animate-spin" /> : (<>Activeer Premium <ArrowRight className="h-5 w-5" /></>)}
               </button>
@@ -305,19 +337,28 @@ const Premium = () => {
               <button
                 type="button"
                 onClick={() => handleCheckout(selectedPlan)}
-                disabled={loadingPlan !== null}
-                className="btn-pill-outline w-full"
+                disabled={loadingPlan !== null || !hasStripeToken()}
+                className="btn-pill-outline w-full disabled:opacity-50"
               >
-                {loadingPlan ? <Loader2 className="h-5 w-5 animate-spin" /> : (<>Direct betalen ({selectedPlan === "yearly" ? "€14,99/jaar" : "€1,99/maand"})</>)}
+                {loadingPlan ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>Direct betalen ({formatPlanPrice(selectedPlan)})</>
+                )}
               </button>
             </div>
           )}
 
-          <div className="mt-6 flex items-center justify-center gap-1 text-[12px] text-muted-foreground">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Star key={i} className="h-3.5 w-3.5 fill-gold text-gold" />
-            ))}
-            <span className="ml-1">Veilig betalen via Stripe · op elk moment opzegbaar</span>
+          <div className="mt-6 flex flex-col items-center gap-2 text-center">
+            <div className="flex items-center gap-1 text-[12px] text-muted-foreground">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star key={i} className="h-3.5 w-3.5 fill-gold text-gold" />
+              ))}
+              <span className="ml-1">Meer dan 500 Kortrijkse chauffeurs</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Veilig betalen via Stripe · op elk moment opzegbaar
+            </p>
           </div>
         </div>
       </div>
