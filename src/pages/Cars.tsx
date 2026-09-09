@@ -17,6 +17,8 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { useDataSource, type Car } from "@/hooks/useDataSource";
 import { usePremium } from "@/hooks/usePremium";
+import { canAddVehicle } from "@/lib/premiumLimits";
+import { PremiumSoftPrompt } from "@/components/PremiumSoftPrompt";
 
 const COLORS = [
   "hsl(165 100% 41%)", // mint primary
@@ -56,7 +58,7 @@ const Cars = () => {
     }
   }, [isOnboarding, loading, cars.length]);
 
-  const canAddMore = premium || cars.length < 1;
+  const canAddMore = canAddVehicle(premium, cars.length);
 
   const openNew = () => {
     if (!canAddMore) {
@@ -233,7 +235,14 @@ const Cars = () => {
       )}
 
       {!premium && cars.length >= 1 && (
-        <Link
+        <div className="space-y-3">
+          <PremiumSoftPrompt
+            id="second-vehicle"
+            title="Tweede voertuig? Dat is Premium"
+            description="Wissel snel tussen auto's per parkeersessie — handig als gezin of bedrijfswagen."
+            cta="Bekijk Premium"
+          />
+          <Link
           to="/premium"
           className="flex items-center gap-3 rounded-[22px] bg-card p-4 text-left shadow-card transition-base hover:brightness-95"
         >
@@ -252,6 +261,7 @@ const Cars = () => {
             ✨ Upgrade
           </span>
         </Link>
+        </div>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>

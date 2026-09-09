@@ -9,7 +9,7 @@ import { driveMin, distKm, formatDist, navigateTo, walkMin, zoneStatus } from "@
 import { useEffect, useState } from "react";
 import { usePremium } from "@/hooks/usePremium";
 import { cn } from "@/lib/utils";
-import { FREE_FAVORITES_LIMIT } from "@/lib/premiumLimits";
+import { FREE_FAVORITES_LIMIT, isFavoriteLocked } from "@/lib/premiumLimits";
 import { PremiumSoftPrompt } from "@/components/PremiumSoftPrompt";
 
 const FREE_LIMIT = FREE_FAVORITES_LIMIT;
@@ -68,7 +68,7 @@ const Favorites = () => {
           )}
           <ul className="space-y-3">
           {enriched.map(({ fav, live, d }, i) => {
-            const locked = !premium && i >= FREE_LIMIT;
+            const locked = isFavoriteLocked(premium, i);
             const status = live ? zoneStatus(live) : "unknown";
             return (
               <li key={fav.id} className={cn("card-soft p-4", locked && "opacity-60")}>

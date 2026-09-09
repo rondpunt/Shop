@@ -22,5 +22,9 @@ export const useReminderPref = () => {
     setPrefs(prefsStore.set({ alarmTone: tone }));
   };
 
-  return { prefs, setRemindBefore, setAlarmTone };
+  const setRemindBeforeSecondary = (min: number | null) => {
+    setPrefs(prefsStore.set({ remindBeforeSecondaryMin: min }));
+  };
+
+  return { prefs, setRemindBefore, setRemindBeforeSecondary, setAlarmTone };
 };
