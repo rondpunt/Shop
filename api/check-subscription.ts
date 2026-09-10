@@ -40,20 +40,10 @@ export default async function handler(req: any, res: any) {
     };
 
     const supabaseAdmin = getAdminClient();
-    const { data: existing } = await supabaseAdmin
+    const { error: upsertError } = await supabaseAdmin
       .from("subscriptions")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("environment", env)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (existing?.id) {
-      await supabaseAdmin.from("subscriptions").update(row).eq("id", existing.id);
-    } else {
-      await supabaseAdmin.from("subscriptions").insert(row);
-    }
+      .upsert(row, { onConflict: "user_id" });
+    if (upsertError) throw upsertError;
 
     return res.status(200).json({
       status: sub.status,
