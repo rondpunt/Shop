@@ -1,4 +1,10 @@
 import { SHOPGO_SPOTS } from "../src/data/shopgo-spots.js";
+import {
+  getSpotsCacheKey,
+  getSpotsCacheTtlSeconds,
+  readFeedCache,
+  writeFeedCache,
+} from "./_feedCache.js";
 
 export type SpotStatus = "free" | "occupied" | "unknown";
 
@@ -111,7 +117,7 @@ const mockSpots = (updatedAt: string): SpotDto[] =>
     updatedAt,
   }));
 
-export const buildSpotsResponse = async (): Promise<SpotsResponse> => {
+const buildFreshSpotsResponse = async (): Promise<SpotsResponse> => {
   const cachedAt = new Date().toISOString();
   try {
     const { zones, fetchedAt } = await fetchParkoZones();
@@ -144,6 +150,23 @@ export const buildSpotsResponse = async (): Promise<SpotsResponse> => {
     console.error("Parko fetch failed; returning mock spots", error);
     return { spots: mockSpots(cachedAt), cachedAt, stale: true };
   }
+};
+
+export const buildSpotsResponse = async (): Promise<SpotsResponse> => {
+  try {
+    const cached = await readFeedCache<SpotsResponse>(getSpotsCacheKey());
+    if (cached) return cached;
+  } catch {
+    // feed_cache unavailable — fall through to live fetch
+  }
+
+  const fresh = await buildFreshSpotsResponse();
+  try {
+    await writeFeedCache(getSpotsCacheKey(), fresh, getSpotsCacheTtlSeconds());
+  } catch {
+    // cache write failure must not break the response
+  }
+  return fresh;
 };
 
 export const isAllowedSpotId = (spotId: string): boolean =>
