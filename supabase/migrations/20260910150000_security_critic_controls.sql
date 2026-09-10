@@ -15,16 +15,13 @@ CREATE INDEX IF NOT EXISTS timer_sessions_user_started_idx
 
 ALTER TABLE public.timer_sessions ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.timer_sessions FROM PUBLIC, anon, authenticated;
-GRANT SELECT, INSERT, UPDATE ON TABLE public.timer_sessions TO authenticated;
+GRANT SELECT ON TABLE public.timer_sessions TO authenticated;
 
 CREATE POLICY "Timer sessions: select own" ON public.timer_sessions
   FOR SELECT TO authenticated
   USING ((SELECT auth.uid()) = user_id);
 
--- Server-side demo writes go through SECURITY DEFINER RPC only.
-CREATE POLICY "Timer sessions: insert own" ON public.timer_sessions
-  FOR INSERT TO authenticated
-  WITH CHECK ((SELECT auth.uid()) = user_id);
+-- Writes only via service_role + start_timer_session (SECURITY DEFINER).
 
 CREATE TABLE IF NOT EXISTS public.feed_cache (
   cache_key text PRIMARY KEY,
