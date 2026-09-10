@@ -1,4 +1,4 @@
-import { getAdminClient } from "./_shared.js";
+import { getAdminClient, isSupabaseAdminConfigured } from "./_shared.js";
 
 const DEFAULT_SPOTS_MAX_HITS = 60;
 const DEFAULT_SPOTS_WINDOW_SECONDS = 60;
@@ -24,11 +24,15 @@ const spotsRateLimitConfig = () => {
   return { maxHits, windowSeconds };
 };
 
-/** Fail-closed: rejects when IP is unknown, store unavailable, or cap exceeded. */
+/** Fail-closed when Supabase is configured; skipped when admin credentials are absent. */
 export const enforceSpotsIpRateLimit = async (req: {
   headers?: Record<string, string | string[] | undefined>;
   socket?: { remoteAddress?: string };
 }) => {
+  if (!isSupabaseAdminConfigured()) {
+    return;
+  }
+
   const ip = getClientIp(req);
   if (!ip) {
     throw Object.assign(new Error("Could not determine client IP"), { statusCode: 503 });

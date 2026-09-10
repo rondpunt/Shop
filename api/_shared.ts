@@ -6,8 +6,10 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 const configuredOrigin = process.env.APP_ORIGIN || process.env.VERCEL_PROJECT_PRODUCTION_URL || "";
 
+export const isSupabaseAdminConfigured = () => Boolean(supabaseUrl && serviceRoleKey);
+
 const getSupabaseAdmin = () => {
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!isSupabaseAdminConfigured()) {
     throw Object.assign(new Error("Server configuration incomplete"), { statusCode: 503 });
   }
   return createClient(supabaseUrl, serviceRoleKey, {
