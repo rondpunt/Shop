@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { PageLoader } from "@/components/PageLoader";
 
 const Auth = lazy(() => import("./pages/Auth"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const Home = lazy(() => import("./pages/Home"));
 const ActiveSession = lazy(() => import("./pages/ActiveSession"));
 const Cars = lazy(() => import("./pages/Cars"));
@@ -53,6 +54,7 @@ const App = () => (
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/install" element={<Install />} />
                 <Route element={<AppLayout />}>

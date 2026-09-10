@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useDataSource } from "@/hooks/useDataSource";
+import { usePremium } from "@/hooks/usePremium";
 import { useReminderPref } from "@/hooks/useReminderPref";
 import { ensureNotificationPermission, scheduleSessionAlarms } from "@/lib/notifications";
 import { SHOPGO_DURATION_SEC } from "@/lib/format";
@@ -56,6 +57,7 @@ const CHAT_PRESETS = [
 export default function AiAssistant() {
   const navigate = useNavigate();
   const { startSession, cars, activeSession } = useDataSource();
+  const { premium } = usePremium();
   const { prefs } = useReminderPref();
 
   // Smart Start Parser States
@@ -153,7 +155,8 @@ export default function AiAssistant() {
           sessionId: session.id,
           endsAt,
           remindBeforeMin,
-          locationLabel: streetName
+          locationLabel: streetName,
+          doubleWarnings: premium,
         });
       }
 

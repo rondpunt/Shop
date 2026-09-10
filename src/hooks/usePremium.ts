@@ -155,7 +155,7 @@ export const usePremium = () => {
 
   const openCheckout = useCallback(async (plan: Plan): Promise<{ clientSecret: string } | null> => {
     if (!user) throw new Error("Niet aangemeld");
-    if (!hasStripeToken()) throw new Error("Betalingen nog niet ingeschakeld");
+    if (!hasStripeToken()) throw new Error("Online betalen is nog niet ingeschakeld op deze omgeving.");
     const priceId = plan === "monthly" ? "premium_monthly" : "premium_yearly";
     const returnUrl = `${window.location.origin}/premium?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
     const { data: { session } } = await supabase.auth.getSession();
