@@ -4,6 +4,7 @@ import { Heart, Play, X } from "lucide-react";
 import { useParkoLive, nearestZone } from "@/hooks/useParkoLive";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useDataSource } from "@/hooks/useDataSource";
+import { usePremium } from "@/hooks/usePremium";
 import { driveMin, distKm, formatDist, navigateTo, walkMin, zoneStatus } from "@/lib/parko";
 import { SHOPGO_DURATION_SEC } from "@/lib/format";
 import { ensureNotificationPermission, scheduleSessionAlarms } from "@/lib/notifications";
@@ -18,6 +19,7 @@ const LocationDetail = () => {
   const { data: parko } = useParkoLive();
   const { isFavorite, toggle } = useFavorites();
   const { activeSession, startSession, cars } = useDataSource();
+  const { premium } = usePremium();
 
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [showStartSheet, setShowStartSheet] = useState(false);
@@ -96,6 +98,7 @@ const LocationDetail = () => {
           endsAt,
           remindBeforeMin,
           locationLabel: sessionAddress?.split(",")[0]?.trim(),
+          doubleWarnings: premium,
         });
       }
       setShowStartSheet(false);

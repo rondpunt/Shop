@@ -86,6 +86,8 @@ export type ScheduleOpts = {
   endsAt: Date;            // 30-min mark
   remindBeforeMin: number; // user-chosen primary reminder (1..25)
   locationLabel?: string;
+  /** Premium: extra safety-net reminder (e.g. 2 min before end). Free: primary only. */
+  doubleWarnings?: boolean;
 };
 
 const webTimers = new Map<string, number[]>();
@@ -111,14 +113,16 @@ export async function scheduleSessionAlarms(opts: ScheduleOpts): Promise<void> {
     });
   }
 
-  const twoAt = endTs - 2 * 60_000;
-  if (twoAt > now + 1000 && opts.remindBeforeMin !== 2) {
-    items.push({
-      at: twoAt,
-      title: "Nog 2 minuten!",
-      body: `Ga nu naar je auto${place}.`,
-      key: "warn2",
-    });
+  if (opts.doubleWarnings) {
+    const twoAt = endTs - 2 * 60_000;
+    if (twoAt > now + 1000 && opts.remindBeforeMin !== 2) {
+      items.push({
+        at: twoAt,
+        title: "Nog 2 minuten!",
+        body: `Ga nu naar je auto${place}.`,
+        key: "warn2",
+      });
+    }
   }
 
   if (endTs > now + 1000) {

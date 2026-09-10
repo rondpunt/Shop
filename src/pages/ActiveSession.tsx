@@ -14,6 +14,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useDataSource, type Session } from "@/hooks/useDataSource";
+import { usePremium } from "@/hooks/usePremium";
 import { useReminderPref } from "@/hooks/useReminderPref";
 import { formatMMSS, SHOPGO_DURATION_SEC } from "@/lib/format";
 import { cancelSessionAlarms, ensureNotificationPermission, showOngoingTimerNotification } from "@/lib/notifications";
@@ -30,6 +31,7 @@ const ActiveSession = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getSession, endSession: endIt, updateSession } = useDataSource();
+  const { premium } = usePremium();
   const { prefs } = useReminderPref();
   const [session, setSession] = useState<Session | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -54,7 +56,7 @@ const ActiveSession = () => {
       // Start de "altijd zichtbare" widget-notificatie zodra de sessie geladen is.
       try {
         const ok = await ensureNotificationPermission();
-        if (ok) {
+        if (ok && premium) {
           await showOngoingTimerNotification({
             sessionId: s.id,
             endsAt: new Date(s.ends_at),

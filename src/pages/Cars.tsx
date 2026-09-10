@@ -17,6 +17,7 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { useDataSource, type Car } from "@/hooks/useDataSource";
 import { usePremium } from "@/hooks/usePremium";
+import { FREE_VEHICLES_LIMIT } from "@/lib/premiumLimits";
 
 const COLORS = [
   "hsl(165 100% 41%)", // mint primary
@@ -56,7 +57,7 @@ const Cars = () => {
     }
   }, [isOnboarding, loading, cars.length]);
 
-  const canAddMore = premium || cars.length < 1;
+  const canAddMore = premium || cars.length < FREE_VEHICLES_LIMIT;
 
   const openNew = () => {
     if (!canAddMore) {
@@ -93,7 +94,7 @@ const Cars = () => {
         });
         toast.success("Auto bijgewerkt");
       } else {
-        if (!premium && cars.length >= 1) {
+        if (!premium && cars.length >= FREE_VEHICLES_LIMIT) {
           toast.info("Upgrade naar Premium voor meerdere voertuigen");
           setOpen(false);
           navigate("/premium");
@@ -165,7 +166,7 @@ const Cars = () => {
       ) : (
         <div className="space-y-3">
           {cars.map((c, idx) => {
-            const locked = !premium && idx > 0;
+            const locked = !premium && idx >= FREE_VEHICLES_LIMIT;
             return (
             <div
               key={c.id}
@@ -232,7 +233,7 @@ const Cars = () => {
         </div>
       )}
 
-      {!premium && cars.length >= 1 && (
+      {!premium && cars.length >= FREE_VEHICLES_LIMIT && (
         <Link
           to="/premium"
           className="flex items-center gap-3 rounded-[22px] bg-card p-4 text-left shadow-card transition-base hover:brightness-95"

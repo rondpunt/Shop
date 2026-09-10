@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Bell, Check } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { useReminderPref } from "@/hooks/useReminderPref";
+import { usePremium } from "@/hooks/usePremium";
+import { PremiumSoftPrompt } from "@/components/PremiumSoftPrompt";
 import { ReminderDial } from "@/components/ReminderDial";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -10,6 +12,7 @@ const QUICK = [2, 4, 5, 7, 10];
 
 const ReminderSettings = () => {
   const { prefs, setRemindBefore, setAlarmTone } = useReminderPref();
+  const { premium } = usePremium();
   const [pendingValue, setPendingValue] = useState(prefs.remindBeforeMin);
   const [pendingTone, setPendingTone] = useState(prefs.alarmTone || "classic");
 
@@ -85,8 +88,18 @@ const ReminderSettings = () => {
       </button>
 
       <p className="mt-3 px-2 text-center text-[11px] italic text-muted-foreground">
-        Deze instelling wordt onthouden op dit toestel én gesynced met je account.
+        Deze instelling wordt onthouden op dit toestel{premium ? " én gesynced met je account" : ""}.
       </p>
+
+      {!premium && (
+        <div className="mt-4">
+          <PremiumSoftPrompt
+            id="reminder-double"
+            title="Premium: dubbele waarschuwingen"
+            description="Gratis krijg je één waarschuwing per timer. Premium voegt een extra veiligheidsnet toe (2 min vóór het einde) plus live widget."
+          />
+        </div>
+      )}
     </div>
   );
 };

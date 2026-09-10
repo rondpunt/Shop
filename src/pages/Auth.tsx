@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Cloud, Map, Timer } from "lucide-react";
 import { SGLogo } from "@/components/SGLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import { useAuth } from "@/hooks/useAuth";
 const emailSchema = z.string().trim().email("Geldig e-mailadres vereist").max(255);
 const codeSchema = z.string().trim().length(6, "Code moet 6 cijfers zijn");
 
+const OAUTH_REDIRECT_PATH = "/auth/callback";
+
 const Auth = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -21,7 +23,7 @@ const Auth = () => {
     ? requestedRedirect
     : "/";
   const { session } = useAuth();
-  
+
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -33,23 +35,22 @@ const Auth = () => {
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      const origin = event.origin;
-      if (origin !== window.location.origin) {
-        return;
-      }
+      if (event.origin !== window.location.origin) return;
       if (event.data?.type === "SUPABASE_AUTH_SUCCESS" && event.data?.session) {
         const sess = event.data.session;
-        supabase.auth.setSession({
-          access_token: sess.access_token,
-          refresh_token: sess.refresh_token
-        }).then(({ error }) => {
-          if (error) {
-            toast.error("Google-sessie koppeling mislukt", { description: error.message });
-          } else {
-            toast.success("Succesvol ingelogd met Google");
-            navigate(redirect, { replace: true });
-          }
-        });
+        supabase.auth
+          .setSession({
+            access_token: sess.access_token,
+            refresh_token: sess.refresh_token,
+          })
+          .then(({ error }) => {
+            if (error) {
+              toast.error("Google-sessie koppeling mislukt", { description: error.message });
+            } else {
+              toast.success("Succesvol ingelogd met Google");
+              navigate(redirect, { replace: true });
+            }
+          });
       }
     };
     window.addEventListener("message", handleMessage);
@@ -59,12 +60,15 @@ const Auth = () => {
   const handleGoogle = async () => {
     setLoading(true);
     try {
+      sessionStorage.setItem("shopgo_auth_redirect", redirect);
+      const redirectTo = `${window.location.origin}${OAUTH_REDIRECT_PATH}`;
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/`,
+          redirectTo,
           skipBrowserRedirect: true,
-        }
+          queryParams: { prompt: "select_account" },
+        },
       });
       if (error) throw error;
       if (data?.url) {
@@ -72,10 +76,19 @@ const Auth = () => {
         const height = 600;
         const left = window.screenX + (window.outerWidth - width) / 2;
         const top = window.screenY + (window.outerHeight - height) / 2;
-        window.open(data.url, "GoogleLogin", `width=${width},height=${height},left=${left},top=${top}`);
+        const popup = window.open(
+          data.url,
+          "GoogleLogin",
+          `width=${width},height=${height},left=${left},top=${top}`,
+        );
+        if (!popup) {
+          toast.error("Pop-up geblokkeerd", {
+            description: "Sta pop-ups toe voor Shop&Go, of log in via e-mail.",
+          });
+        }
       }
     } catch (err) {
-      toast.error("Google Inloggen Mislukt", { description: (err as Error).message });
+      toast.error("Google-inloggen mislukt", { description: (err as Error).message });
     } finally {
       setLoading(false);
     }
@@ -91,9 +104,9 @@ const Auth = () => {
       const { error } = await supabase.auth.signInWithOtp({
         email: emailParsed.data,
       });
-      
+
       if (error) throw error;
-      
+
       toast.success("Code verstuurd", { description: "Kijk in je mailbox voor de code." });
       setStep("code");
     } catch (err) {
@@ -115,9 +128,9 @@ const Auth = () => {
         token: codeParsed.data,
         type: "email",
       });
-      
+
       if (error) throw error;
-      
+
       toast.success("Succesvol ingelogd");
       navigate(redirect, { replace: true });
     } catch (err) {
@@ -141,12 +154,27 @@ const Auth = () => {
             </div>
           </div>
 
+          <div className="mb-5 grid grid-cols-2 gap-2 text-[12px]">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+              <div className="mb-1 flex items-center gap-1.5 font-bold text-primary">
+                <Map className="h-3.5 w-3.5" /> Zonder account
+              </div>
+              <p className="leading-snug text-muted-foreground">Kaart, timer, favorieten lokaal</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
+              <div className="mb-1 flex items-center gap-1.5 font-bold text-foreground">
+                <Cloud className="h-3.5 w-3.5" /> Met account
+              </div>
+              <p className="leading-snug text-muted-foreground">Sync, Premium, cloud back-up</p>
+            </div>
+          </div>
+
           <div className="rounded-[28px] border border-deep bg-card px-6 py-6 shadow-elevated">
             {step === "email" ? (
               <div className="space-y-6">
-                <Button 
-                  type="button" 
-                  onClick={handleGoogle} 
+                <Button
+                  type="button"
+                  onClick={handleGoogle}
                   disabled={loading}
                   className="h-[52px] w-full rounded-xl bg-[#EA4335] text-base font-bold text-white shadow-md hover:bg-[#D93025]"
                 >
@@ -182,21 +210,27 @@ const Auth = () => {
 
                 <form onSubmit={handleSendCode} className="space-y-5">
                   <div className="space-y-1.5">
-                    <Label htmlFor="email" className="text-muted-foreground">E-mailadres</Label>
-                    <Input 
-                      id="email" 
-                      type="email" 
-                      inputMode="email" 
-                      autoComplete="email" 
-                      value={email} 
-                      onChange={(e) => setEmail(e.target.value)} 
-                      placeholder="jij@voorbeeld.be" 
-                      required 
-                      className="h-[52px] rounded-xl border-deep bg-deep px-4 text-[18px] text-white placeholder:text-white/58" 
+                    <Label htmlFor="email" className="text-muted-foreground">
+                      E-mailadres
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="jij@voorbeeld.be"
+                      required
+                      className="h-[52px] rounded-xl border-deep bg-deep px-4 text-[18px] text-white placeholder:text-white/58"
                     />
                   </div>
-                  
-                  <Button type="submit" className="h-[52px] w-full rounded-xl bg-primary text-base font-extrabold text-primary-foreground shadow-glow-mint hover:bg-primary/90" disabled={loading}>
+
+                  <Button
+                    type="submit"
+                    className="h-[52px] w-full rounded-xl bg-primary text-base font-extrabold text-primary-foreground shadow-glow-mint hover:bg-primary/90"
+                    disabled={loading}
+                  >
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Stuur inlogcode
                   </Button>
@@ -205,32 +239,39 @@ const Auth = () => {
             ) : (
               <form onSubmit={handleVerifyCode} className="space-y-5">
                 <div className="space-y-1.5">
-                  <Label htmlFor="code" className="text-muted-foreground">Bevestigingscode</Label>
-                  <Input 
-                    id="code" 
-                    type="text" 
-                    inputMode="numeric" 
-                    pattern="[0-9]*" 
+                  <Label htmlFor="code" className="text-muted-foreground">
+                    Bevestigingscode
+                  </Label>
+                  <Input
+                    id="code"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     autoComplete="one-time-code"
-                    value={code} 
-                    onChange={(e) => setCode(e.target.value)} 
-                    placeholder="123456" 
-                    required 
-                    className="h-[52px] rounded-xl border-deep bg-deep px-4 text-center text-[22px] tracking-widest text-white placeholder:text-white/58" 
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="123456"
+                    required
+                    className="h-[52px] rounded-xl border-deep bg-deep px-4 text-center text-[22px] tracking-widest text-white placeholder:text-white/58"
                   />
-                  <p className="text-xs text-muted-foreground text-center pt-2">
-                    We hebben een code gestuurd naar <br/><span className="font-bold text-white">{email}</span>
+                  <p className="pt-2 text-center text-xs text-muted-foreground">
+                    We hebben een code gestuurd naar <br />
+                    <span className="font-bold text-white">{email}</span>
                   </p>
                 </div>
-                
-                <Button type="submit" className="h-[52px] w-full rounded-xl bg-primary text-base font-extrabold text-primary-foreground shadow-glow-mint hover:bg-primary/90" disabled={loading}>
+
+                <Button
+                  type="submit"
+                  className="h-[52px] w-full rounded-xl bg-primary text-base font-extrabold text-primary-foreground shadow-glow-mint hover:bg-primary/90"
+                  disabled={loading}
+                >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Inloggen
                 </Button>
 
-                <Button 
-                  type="button" 
-                  variant="ghost" 
+                <Button
+                  type="button"
+                  variant="ghost"
                   className="w-full text-muted-foreground hover:text-white"
                   onClick={() => setStep("email")}
                   disabled={loading}
@@ -244,13 +285,14 @@ const Auth = () => {
           <div className="mt-6 space-y-3 text-center">
             <Link
               to="/"
-              className="inline-block text-[17px] font-extrabold text-primary underline-offset-4 hover:underline"
+              className="inline-flex items-center gap-2 text-[17px] font-extrabold text-primary underline-offset-4 hover:underline"
             >
+              <Timer className="h-4 w-4" />
               Doorgaan zonder account →
             </Link>
             <p className="px-2 text-[13px] leading-relaxed text-muted-foreground">
-              Een account is alleen nodig voor sync & back-up. Timer, locatie, notitie en foto werken
-              ook zonder account.
+              Premium, cloud sync en back-up vereisen een account. Kaart, timer, locatie, notitie en
+              foto werken ook zonder — nooit geblokkeerd.
             </p>
           </div>
         </div>

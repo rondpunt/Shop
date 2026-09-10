@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePremium } from "@/hooks/usePremium";
 import { localStore, type LocalCar, type LocalSession } from "@/lib/localStore";
 import { updateNativeWidget } from "@/lib/widgetTimer";
 
@@ -56,6 +57,7 @@ const fromLocalSession = (s: LocalSession, cars: LocalCar[]): Session => {
 
 export const useDataSource = () => {
   const { user } = useAuth();
+  const { premium } = usePremium();
   const isCloud = !!user;
 
   const [cars, setCars] = useState<Car[]>([]);
@@ -244,12 +246,12 @@ export const useDataSource = () => {
   const activeAddress = activeSession?.address;
 
   useEffect(() => {
-    if (activeId && activeEndsAt) {
+    if (activeId && activeEndsAt && premium) {
       updateNativeWidget(activeEndsAt, activeAddress);
     } else {
       updateNativeWidget(null, null);
     }
-  }, [activeId, activeEndsAt, activeAddress]);
+  }, [activeId, activeEndsAt, activeAddress, premium]);
 
   return {
     isCloud,
